@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Perfil {
+  ADMINISTRADOR
+  TECNICO_PATRIMONIO
+  CHEFE_SETOR
+  USUARIO_CONSULTA
+}
+
+enum EstadoConservacao {
+  EXCELENTE
+  BOM
+  REGULAR
+  RUIM
+  PESSIMO
+}
+
+enum StatusItem {
+  ATIVO
+  INATIVO
+  EM_MOVIMENTACAO
+  BAIXADO
+  EM_MANUTENCAO
+}
+
+enum StatusMovimentacao {
+  AGUARDANDO_CONFIRMACAO_ENTREGA
+  AGUARDANDO_CONFIRMACAO_RECEBIMENTO
+  AGUARDANDO_APROVACAO_PATRIMONIO
+  APROVADA
+  REJEITADA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum TipoEntrada {
+  COMPRA
+  DOACAO
+  CESSAO
+  TRANSFERENCIA
+  PRODUCAO_PROPRIA
+  OUTRO
+}
+
+enum MotivoBaixa {
+  LEILAO
+  DOACAO
+  INSERVIVEL
+  EXTRAVIO
+  DESCARTE
+  TRANSFERENCIA_DEFINITIVA
+  OUTRO
+}
+
+enum StatusInventario {
+  ABERTO
+  CONCLUIDO
+}
+
+enum StatusInventarioItem {
+  PENDENTE
+  LOCALIZADO
+  NAO_LOCALIZADO
+}
+
+model Usuario {
+  id                              String                 @id @default(cuid())
+  nome                            String
+  email                           String                 @unique
+  senhaHash                       String
+  perfil                          Perfil
+  ativo                           Boolean                @default(true)
+  secretariaId                    String?
+  createdAt                       DateTime               @default(now())
+  updatedAt                       DateTime               @updatedAt
+  secretaria                      Secretaria?            @relation(fields: [secretariaId], references: [id], onDelete: SetNull)
+  patrimoniosCriados              Patrimonio[]           @relation("PatrimonioCriadoPor")
+  patrimoniosAtualizados          Patrimonio[]           @relation("PatrimonioAtualizadoPor")
+  movimentacoesSolicitadas        Movimentacao[]         @relation("MovimentacaoSolicitante")
+  movimentacoesEntregaConfirmada  Movimentacao[]         @relation("MovimentacaoEntregaConfirmadaPor")
+  movimentacoesRecebimentoConfirm Movimentacao[]         @relation("MovimentacaoRecebimentoConfirmadoPor")
+  movimentacoesValidadas          Movimentacao[]         @relation("MovimentacaoValidadaPor")
+  historicos                      HistoricoPatrimonio[]
+  auditorias                      Auditoria[]
+  baixas                          BaixaPatrimonial[]
+  inventariosCriados              Inventario[]           @relation("InventarioCriadoPor")
+  inventariosConcluidos           Inventario[]           @relation("InventarioConcluidoPor")
+  inventarioItensRegistrados      InventarioItem[]       @relation("InventarioItemRegistradoPor")
+
+  @@index([secretariaId])
+  @@index([perfil, ativo])
+}
+
+model Secretaria {
+  id                   String         @id @default(cuid())
+  sigla                String         @unique @db.VarChar(10)
+  nomeCompleto         String
+  ativo                Boolean        @default(true)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  usuarios             Usuario[]
+  responsaveis         Responsavel[]
+  patrimoniosAtuais    Patrimonio[]
+  movimentacoesOrigem  Movimentacao[] @relation("MovimentacaoSecretariaOrigem")
+  movimentacoesDestino Movimentacao[] @relation("MovimentacaoSecretariaDestino")
+  inventarios          Inventario[]
+
+  @@index([ativo])
+}
+
+model Responsavel {
+  id                   String         @id @default(cuid())
+  nome                 String
+  cargo                String?
+  setor                String
+  contato              String?
+  ativo                Boolean        @default(true)
+  secretariaId         String
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  secretaria           Secretaria     @relation(fields: [secretariaId], references: [id], onDelete: Restrict)
+  patrimoniosAtuais    Patrimonio[]
+  movimentacoesOrigem  Movimentacao[] @relation("MovimentacaoResponsavelOrigem")
+  movimentacoesDestino Movimentacao[] @relation("MovimentacaoResponsavelDestino")
+
+  @@index([secretariaId, ativo])
+}
+
+model Fornecedor {
+  id          String       @id @default(cuid())
+  nome        String
+  cpfCnpj     String?      @unique @db.VarChar(18)
+  telefone    String?
+  email       String?
+  observacoes String?
+  ativo       Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  patrimonios Patrimonio[]
+
+  @@index([ativo])
+}
+
+model Patrimonio {
+  id                 String             @id @default(cuid())
+  item               String
+  tombo              String             @unique @db.VarChar(5)
+  secretariaAtualId  String
+  localizacaoAtual   String
+  responsavelAtualId String
+  estadoConservacao  EstadoConservacao
+  status             StatusItem         @default(ATIVO)
+  fornecedorId       String?
+  tipoEntrada        TipoEntrada
+  valorOriginal      Decimal            @db.Decimal(14, 2)
+  valorAtual         Decimal?           @db.Decimal(14, 2)
+  descricao          String?
+  dataAquisicao      DateTime?
+  observacoes        String?
+  createdById        String?
+  updatedById        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  secretariaAtual    Secretaria         @relation(fields: [secretariaAtualId], references: [id], onDelete: Restrict)
+  responsavelAtual   Responsavel        @relation(fields: [responsavelAtualId], references: [id], onDelete: Restrict)
+  fornecedor         Fornecedor?        @relation(fields: [fornecedorId], references: [id], onDelete: SetNull)
+  createdBy          Usuario?           @relation("PatrimonioCriadoPor", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedBy          Usuario?           @relation("PatrimonioAtualizadoPor", fields: [updatedById], references: [id], onDelete: SetNull)
+  movimentacoes      Movimentacao[]
+  historicos         HistoricoPatrimonio[]
+  baixa              BaixaPatrimonial?
+  inventarioItens    InventarioItem[]
+
+  @@index([secretariaAtualId])
+  @@index([responsavelAtualId])
+  @@index([status])
+  @@index([secretariaAtualId, status])
+}
+
+model Inventario {
+  id            String            @id @default(cuid())
+  titulo        String
+  secretariaId  String
+  status        StatusInventario  @default(ABERTO)
+  observacoes   String?
+  criadoPorId   String
+  concluidoPorId String?
+  iniciadoEm    DateTime          @default(now())
+  concluidoEm   DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  secretaria    Secretaria        @relation(fields: [secretariaId], references: [id], onDelete: Restrict)
+  criadoPor     Usuario           @relation("InventarioCriadoPor", fields: [criadoPorId], references: [id], onDelete: Restrict)
+  concluidoPor  Usuario?          @relation("InventarioConcluidoPor", fields: [concluidoPorId], references: [id], onDelete: SetNull)
+  itens         InventarioItem[]
+
+  @@index([secretariaId])
+  @@index([status])
+  @@index([secretariaId, status])
+  @@index([iniciadoEm])
+}
+
+model InventarioItem {
+  id                     String               @id @default(cuid())
+  inventarioId           String
+  patrimonioId           String
+  tomboSnapshot          String               @db.VarChar(5)
+  itemSnapshot           String
+  localizacaoSnapshot    String
+  responsavelSnapshotNome String
+  status                 StatusInventarioItem @default(PENDENTE)
+  observacoes            String?
+  registradoPorId        String?
+  registradoEm           DateTime?
+  createdAt              DateTime             @default(now())
+  updatedAt              DateTime             @updatedAt
+  inventario             Inventario           @relation(fields: [inventarioId], references: [id], onDelete: Restrict)
+  patrimonio             Patrimonio           @relation(fields: [patrimonioId], references: [id], onDelete: Restrict)
+  registradoPor          Usuario?             @relation("InventarioItemRegistradoPor", fields: [registradoPorId], references: [id], onDelete: SetNull)
+
+  @@unique([inventarioId, patrimonioId])
+  @@index([inventarioId, status])
+  @@index([patrimonioId])
+}
+
+model Movimentacao {
+  id                         String              @id @default(cuid())
+  patrimonioId               String
+  secretariaOrigemId         String
+  localizacaoOrigem          String
+  secretariaDestinoId        String
+  localizacaoDestino         String
+  responsavelOrigemId        String
+  responsavelDestinoId       String?
+  solicitanteId              String
+  motivo                     String
+  observacoes                String?
+  status                     StatusMovimentacao  @default(AGUARDANDO_CONFIRMACAO_ENTREGA)
+  solicitadoEm               DateTime            @default(now())
+  confirmadoEntregaPorId     String?
+  confirmadoEntregaEm        DateTime?
+  confirmadoRecebimentoPorId String?
+  confirmadoRecebimentoEm    DateTime?
+  validadoPorId              String?
+  validadoEm                 DateTime?
+  justificativaRejeicao      String?
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+  patrimonio                 Patrimonio          @relation(fields: [patrimonioId], references: [id], onDelete: Restrict)
+  secretariaOrigem           Secretaria          @relation("MovimentacaoSecretariaOrigem", fields: [secretariaOrigemId], references: [id], onDelete: Restrict)
+  secretariaDestino          Secretaria          @relation("MovimentacaoSecretariaDestino", fields: [secretariaDestinoId], references: [id], onDelete: Restrict)
+  responsavelOrigem          Responsavel         @relation("MovimentacaoResponsavelOrigem", fields: [responsavelOrigemId], references: [id], onDelete: Restrict)
+  responsavelDestino         Responsavel?        @relation("MovimentacaoResponsavelDestino", fields: [responsavelDestinoId], references: [id], onDelete: SetNull)
+  solicitante                Usuario             @relation("MovimentacaoSolicitante", fields: [solicitanteId], references: [id], onDelete: Restrict)
+  confirmadoEntregaPor       Usuario?            @relation("MovimentacaoEntregaConfirmadaPor", fields: [confirmadoEntregaPorId], references: [id], onDelete: SetNull)
+  confirmadoRecebimentoPor   Usuario?            @relation("MovimentacaoRecebimentoConfirmadoPor", fields: [confirmadoRecebimentoPorId], references: [id], onDelete: SetNull)
+  validadoPor                Usuario?            @relation("MovimentacaoValidadaPor", fields: [validadoPorId], references: [id], onDelete: SetNull)
+  historicos                 HistoricoPatrimonio[]
+
+  @@index([patrimonioId])
+  @@index([status])
+  @@index([patrimonioId, status])
+  @@index([secretariaOrigemId])
+  @@index([secretariaDestinoId])
+}
+
+model HistoricoPatrimonio {
+  id                 String            @id @default(cuid())
+  patrimonioId       String
+  usuarioId          String?
+  movimentacaoId     String?
+  baixaPatrimonialId String?
+  evento             String
+  descricao          String
+  dadosAnteriores    Json?
+  dadosNovos         Json?
+  criadoEm           DateTime          @default(now())
+  patrimonio         Patrimonio        @relation(fields: [patrimonioId], references: [id], onDelete: Restrict)
+  usuario            Usuario?          @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  movimentacao       Movimentacao?     @relation(fields: [movimentacaoId], references: [id], onDelete: SetNull)
+  baixaPatrimonial   BaixaPatrimonial? @relation(fields: [baixaPatrimonialId], references: [id], onDelete: SetNull)
+
+  @@index([patrimonioId, criadoEm])
+  @@index([usuarioId])
+}
+
+model Auditoria {
+  id              String   @id @default(cuid())
+  entidade        String
+  entidadeId      String
+  acao            String
+  usuarioId       String?
+  dadosAnteriores Json?
+  dadosNovos      Json?
+  contexto        Json?
+  createdAt       DateTime @default(now())
+  usuario         Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([entidade, entidadeId])
+  @@index([createdAt])
+  @@index([usuarioId])
+}
+
+model BaixaPatrimonial {
+  id           String                @id @default(cuid())
+  patrimonioId String                @unique
+  usuarioId    String
+  motivo       MotivoBaixa
+  observacoes  String?
+  baixadoEm    DateTime              @default(now())
+  patrimonio   Patrimonio            @relation(fields: [patrimonioId], references: [id], onDelete: Restrict)
+  usuario      Usuario               @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
+  historicos   HistoricoPatrimonio[]
+
+  @@index([usuarioId])
+  @@index([baixadoEm])
+}
