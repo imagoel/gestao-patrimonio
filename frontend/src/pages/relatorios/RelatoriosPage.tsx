@@ -1,99 +1,177 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { App as AntdApp, Button, Card, Input, Select, Space } from 'antd'
-import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
-import { AppLayout } from '../../components/layout/AppLayout'
-import { PageHeader } from '../../components/layout/PageHeader'
-import { usePermissao } from '../../hooks/usePermissao'
-import { relatoriosService } from '../../services/relatorios.service'
-import { MotivoBaixa, Perfil, StatusItem, StatusMovimentacao } from '../../types/enums'
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { App as AntdApp, Button, Card, Input, Select, Space } from "antd";
+import { useState } from "react";
+import { Navigate } from "react-router-dom";
+import { AppLayout } from "../../components/layout/AppLayout";
+import { PageHeader } from "../../components/layout/PageHeader";
+import { usePermissao } from "../../hooks/usePermissao";
+import { relatoriosService } from "../../services/relatorios.service";
+import {
+  MotivoBaixa,
+  Perfil,
+  StatusItem,
+  StatusMovimentacao,
+} from "../../types/enums";
 
 function triggerBlobDownload(blob: Blob, filename: string) {
-  const url = window.URL.createObjectURL(blob)
-  const link = document.createElement('a')
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
 
-  link.href = url
-  link.download = filename
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  window.URL.revokeObjectURL(url)
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export function RelatoriosPage() {
-  const { message } = AntdApp.useApp()
-  const { hasPerfil } = usePermissao()
-  const canAccess = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO)
+  const { message } = AntdApp.useApp();
+  const { hasPerfil } = usePermissao();
+  const canAccess = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO);
   const [patrimonioSecretariaId, setPatrimonioSecretariaId] = useState<
     string | undefined
-  >(undefined)
+  >(undefined);
   const [patrimonioResponsavelId, setPatrimonioResponsavelId] = useState<
     string | undefined
-  >(undefined)
-  const [patrimonioStatus, setPatrimonioStatus] = useState<StatusItem | undefined>(
-    undefined,
-  )
-  const [patrimonioLocalizacao, setPatrimonioLocalizacao] = useState('')
+  >(undefined);
+  const [patrimonioStatus, setPatrimonioStatus] = useState<
+    StatusItem | undefined
+  >(undefined);
+  const [patrimonioLocalizacao, setPatrimonioLocalizacao] = useState("");
   const [movimentacaoSecretariaId, setMovimentacaoSecretariaId] = useState<
     string | undefined
-  >(undefined)
+  >(undefined);
   const [movimentacaoStatus, setMovimentacaoStatus] = useState<
     StatusMovimentacao | undefined
-  >(undefined)
-  const [baixaSecretariaId, setBaixaSecretariaId] = useState<string | undefined>(
-    undefined,
-  )
+  >(undefined);
+  const [baixaSecretariaId, setBaixaSecretariaId] = useState<
+    string | undefined
+  >(undefined);
   const [baixaMotivo, setBaixaMotivo] = useState<MotivoBaixa | undefined>(
     undefined,
-  )
-  const [auditoriaAcao, setAuditoriaAcao] = useState<string | undefined>(undefined)
+  );
+  const [auditoriaAcao, setAuditoriaAcao] = useState<string | undefined>(
+    undefined,
+  );
   const [auditoriaUsuarioId, setAuditoriaUsuarioId] = useState<
     string | undefined
-  >(undefined)
+  >(undefined);
   const [auditoriaPatrimonioId, setAuditoriaPatrimonioId] = useState<
     string | undefined
-  >(undefined)
+  >(undefined);
   const [historicoPatrimonioId, setHistoricoPatrimonioId] = useState<
     string | undefined
-  >(undefined)
+  >(undefined);
+  const patrimonioFilters = {
+    secretariaAtualId: patrimonioSecretariaId,
+    responsavelAtualId: patrimonioResponsavelId,
+    status: patrimonioStatus,
+    localizacaoAtual: patrimonioLocalizacao.trim() || undefined,
+  };
+  const patrimonioDedicatedFilters = {
+    secretariaAtualId: patrimonioSecretariaId,
+    responsavelAtualId: patrimonioResponsavelId,
+    localizacaoAtual: patrimonioLocalizacao.trim() || undefined,
+  };
+  const movimentacaoFilters = {
+    secretariaId: movimentacaoSecretariaId,
+    status: movimentacaoStatus,
+  };
+  const movimentacaoDedicatedFilters = {
+    secretariaId: movimentacaoSecretariaId,
+  };
 
   const optionsQuery = useQuery({
-    queryKey: ['relatorios-options'],
+    queryKey: ["relatorios-options"],
     queryFn: relatoriosService.findOptions,
     enabled: canAccess,
-  })
+  });
 
   const patrimonioMutation = useMutation({
-    mutationFn: () =>
-      relatoriosService.downloadPatrimonio({
-        secretariaAtualId: patrimonioSecretariaId,
-        responsavelAtualId: patrimonioResponsavelId,
-        status: patrimonioStatus,
-        localizacaoAtual: patrimonioLocalizacao.trim() || undefined,
-      }),
+    mutationFn: () => relatoriosService.downloadPatrimonio(patrimonioFilters),
     onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename)
-      message.success('Relatorio de patrimonio gerado com sucesso.')
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de patrimonio gerado com sucesso.");
     },
     onError: () => {
-      message.error('Nao foi possivel gerar o relatorio de patrimonio.')
+      message.error("Nao foi possivel gerar o relatorio de patrimonio.");
     },
-  })
+  });
+
+  const patrimonioPorLocalizacaoMutation = useMutation({
+    mutationFn: () =>
+      relatoriosService.downloadBensPorLocalizacao(patrimonioFilters),
+    onSuccess: ({ blob, filename }) => {
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de bens por localizacao gerado com sucesso.");
+    },
+    onError: () => {
+      message.error(
+        "Nao foi possivel gerar o relatorio de bens por localizacao.",
+      );
+    },
+  });
+
+  const bensInativosMutation = useMutation({
+    mutationFn: () =>
+      relatoriosService.downloadBensInativos(patrimonioDedicatedFilters),
+    onSuccess: ({ blob, filename }) => {
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de bens inativos gerado com sucesso.");
+    },
+    onError: () => {
+      message.error("Nao foi possivel gerar o relatorio de bens inativos.");
+    },
+  });
 
   const movimentacaoMutation = useMutation({
     mutationFn: () =>
-      relatoriosService.downloadMovimentacoes({
-        secretariaId: movimentacaoSecretariaId,
-        status: movimentacaoStatus,
-      }),
+      relatoriosService.downloadMovimentacoes(movimentacaoFilters),
     onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename)
-      message.success('Relatorio de movimentacoes gerado com sucesso.')
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de movimentacoes gerado com sucesso.");
     },
     onError: () => {
-      message.error('Nao foi possivel gerar o relatorio de movimentacoes.')
+      message.error("Nao foi possivel gerar o relatorio de movimentacoes.");
     },
-  })
+  });
+
+  const movimentacoesPendentesMutation = useMutation({
+    mutationFn: () =>
+      relatoriosService.downloadMovimentacoesPendentes(
+        movimentacaoDedicatedFilters,
+      ),
+    onSuccess: ({ blob, filename }) => {
+      triggerBlobDownload(blob, filename);
+      message.success(
+        "Relatorio de movimentacoes pendentes gerado com sucesso.",
+      );
+    },
+    onError: () => {
+      message.error(
+        "Nao foi possivel gerar o relatorio de movimentacoes pendentes.",
+      );
+    },
+  });
+
+  const movimentacoesConcluidasMutation = useMutation({
+    mutationFn: () =>
+      relatoriosService.downloadMovimentacoesConcluidas(
+        movimentacaoDedicatedFilters,
+      ),
+    onSuccess: ({ blob, filename }) => {
+      triggerBlobDownload(blob, filename);
+      message.success(
+        "Relatorio de movimentacoes concluidas gerado com sucesso.",
+      );
+    },
+    onError: () => {
+      message.error(
+        "Nao foi possivel gerar o relatorio de movimentacoes concluidas.",
+      );
+    },
+  });
 
   const baixaMutation = useMutation({
     mutationFn: () =>
@@ -102,30 +180,32 @@ export function RelatoriosPage() {
         motivo: baixaMotivo,
       }),
     onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename)
-      message.success('Relatorio de baixas gerado com sucesso.')
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de baixas gerado com sucesso.");
     },
     onError: () => {
-      message.error('Nao foi possivel gerar o relatorio de baixas.')
+      message.error("Nao foi possivel gerar o relatorio de baixas.");
     },
-  })
+  });
 
   const historicoMutation = useMutation({
     mutationFn: async () => {
       if (!historicoPatrimonioId) {
-        throw new Error('Selecione um patrimonio')
+        throw new Error("Selecione um patrimonio");
       }
 
-      return relatoriosService.downloadHistoricoPatrimonio(historicoPatrimonioId)
+      return relatoriosService.downloadHistoricoPatrimonio(
+        historicoPatrimonioId,
+      );
     },
     onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename)
-      message.success('Relatorio de historico gerado com sucesso.')
+      triggerBlobDownload(blob, filename);
+      message.success("Relatorio de historico gerado com sucesso.");
     },
     onError: () => {
-      message.error('Nao foi possivel gerar o relatorio de historico.')
+      message.error("Nao foi possivel gerar o relatorio de historico.");
     },
-  })
+  });
 
   const auditoriaMutation = useMutation({
     mutationFn: () =>
@@ -135,26 +215,28 @@ export function RelatoriosPage() {
         patrimonioId: auditoriaPatrimonioId,
       }),
     onSuccess: ({ blob, filename }) => {
-      triggerBlobDownload(blob, filename)
-      message.success('Relatorio de auditoria de movimentacoes gerado com sucesso.')
+      triggerBlobDownload(blob, filename);
+      message.success(
+        "Relatorio de auditoria de movimentacoes gerado com sucesso.",
+      );
     },
     onError: () => {
       message.error(
-        'Nao foi possivel gerar o relatorio de auditoria de movimentacoes.',
-      )
+        "Nao foi possivel gerar o relatorio de auditoria de movimentacoes.",
+      );
     },
-  })
+  });
 
   if (!canAccess) {
-    return <Navigate to="/403" replace />
+    return <Navigate to="/403" replace />;
   }
 
   return (
     <AppLayout label="Modulo de relatorios">
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+      <Space direction="vertical" size="large" style={{ width: "100%" }}>
         <PageHeader
           title="Relatorios em PDF"
-          description="Emissao inicial de relatorios PDF para patrimonio, movimentacoes, baixas e historico de item, conforme a Fase 2."
+          description="Emissao de relatorios PDF do patrimonio, incluindo versoes dedicadas por localizacao, bens inativos e situacao das movimentacoes."
         />
 
         <Card title="Relatorio de patrimonio">
@@ -166,10 +248,12 @@ export function RelatoriosPage() {
               style={{ width: 240 }}
               value={patrimonioSecretariaId}
               onChange={setPatrimonioSecretariaId}
-              options={(optionsQuery.data?.secretarias ?? []).map((secretaria) => ({
-                label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
-                value: secretaria.id,
-              }))}
+              options={(optionsQuery.data?.secretarias ?? []).map(
+                (secretaria) => ({
+                  label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
+                  value: secretaria.id,
+                }),
+              )}
             />
             <Select
               allowClear
@@ -178,10 +262,12 @@ export function RelatoriosPage() {
               style={{ width: 280 }}
               value={patrimonioResponsavelId}
               onChange={setPatrimonioResponsavelId}
-              options={(optionsQuery.data?.responsaveis ?? []).map((responsavel) => ({
-                label: `${responsavel.nome} - ${responsavel.setor}`,
-                value: responsavel.id,
-              }))}
+              options={(optionsQuery.data?.responsaveis ?? []).map(
+                (responsavel) => ({
+                  label: `${responsavel.nome} - ${responsavel.setor}`,
+                  value: responsavel.id,
+                }),
+              )}
             />
             <Select
               allowClear
@@ -202,17 +288,33 @@ export function RelatoriosPage() {
               style={{ width: 260 }}
               value={patrimonioLocalizacao}
               onChange={(event) => {
-                setPatrimonioLocalizacao(event.target.value)
+                setPatrimonioLocalizacao(event.target.value);
               }}
             />
             <Button
               type="primary"
               loading={patrimonioMutation.isPending}
               onClick={() => {
-                void patrimonioMutation.mutateAsync()
+                void patrimonioMutation.mutateAsync();
               }}
             >
-              Gerar PDF
+              Geral
+            </Button>
+            <Button
+              loading={patrimonioPorLocalizacaoMutation.isPending}
+              onClick={() => {
+                void patrimonioPorLocalizacaoMutation.mutateAsync();
+              }}
+            >
+              Por localizacao
+            </Button>
+            <Button
+              loading={bensInativosMutation.isPending}
+              onClick={() => {
+                void bensInativosMutation.mutateAsync();
+              }}
+            >
+              Bens inativos
             </Button>
           </Space>
         </Card>
@@ -226,10 +328,12 @@ export function RelatoriosPage() {
               style={{ width: 240 }}
               value={movimentacaoSecretariaId}
               onChange={setMovimentacaoSecretariaId}
-              options={(optionsQuery.data?.secretarias ?? []).map((secretaria) => ({
-                label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
-                value: secretaria.id,
-              }))}
+              options={(optionsQuery.data?.secretarias ?? []).map(
+                (secretaria) => ({
+                  label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
+                  value: secretaria.id,
+                }),
+              )}
             />
             <Select
               allowClear
@@ -249,10 +353,26 @@ export function RelatoriosPage() {
               type="primary"
               loading={movimentacaoMutation.isPending}
               onClick={() => {
-                void movimentacaoMutation.mutateAsync()
+                void movimentacaoMutation.mutateAsync();
               }}
             >
-              Gerar PDF
+              Geral
+            </Button>
+            <Button
+              loading={movimentacoesPendentesMutation.isPending}
+              onClick={() => {
+                void movimentacoesPendentesMutation.mutateAsync();
+              }}
+            >
+              Pendentes
+            </Button>
+            <Button
+              loading={movimentacoesConcluidasMutation.isPending}
+              onClick={() => {
+                void movimentacoesConcluidasMutation.mutateAsync();
+              }}
+            >
+              Concluidas
             </Button>
           </Space>
         </Card>
@@ -266,10 +386,12 @@ export function RelatoriosPage() {
               style={{ width: 240 }}
               value={baixaSecretariaId}
               onChange={setBaixaSecretariaId}
-              options={(optionsQuery.data?.secretarias ?? []).map((secretaria) => ({
-                label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
-                value: secretaria.id,
-              }))}
+              options={(optionsQuery.data?.secretarias ?? []).map(
+                (secretaria) => ({
+                  label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
+                  value: secretaria.id,
+                }),
+              )}
             />
             <Select
               allowClear
@@ -288,7 +410,7 @@ export function RelatoriosPage() {
               type="primary"
               loading={baixaMutation.isPending}
               onClick={() => {
-                void baixaMutation.mutateAsync()
+                void baixaMutation.mutateAsync();
               }}
             >
               Gerar PDF
@@ -319,12 +441,12 @@ export function RelatoriosPage() {
               style={{ width: 280 }}
               value={auditoriaUsuarioId}
               onChange={setAuditoriaUsuarioId}
-              options={(optionsQuery.data?.usuariosAuditoriaMovimentacao ?? []).map(
-                (usuario) => ({
-                  label: `${usuario.nome} - ${usuario.email}`,
-                  value: usuario.id,
-                }),
-              )}
+              options={(
+                optionsQuery.data?.usuariosAuditoriaMovimentacao ?? []
+              ).map((usuario) => ({
+                label: `${usuario.nome} - ${usuario.email}`,
+                value: usuario.id,
+              }))}
             />
             <Select
               showSearch
@@ -334,17 +456,19 @@ export function RelatoriosPage() {
               style={{ width: 380 }}
               value={auditoriaPatrimonioId}
               onChange={setAuditoriaPatrimonioId}
-              options={(optionsQuery.data?.patrimonios ?? []).map((patrimonio) => ({
-                label: `${patrimonio.tombo} - ${patrimonio.item} - ${patrimonio.status}`,
-                value: patrimonio.id,
-              }))}
+              options={(optionsQuery.data?.patrimonios ?? []).map(
+                (patrimonio) => ({
+                  label: `${patrimonio.tombo} - ${patrimonio.item} - ${patrimonio.status}`,
+                  value: patrimonio.id,
+                }),
+              )}
               optionFilterProp="label"
             />
             <Button
               type="primary"
               loading={auditoriaMutation.isPending}
               onClick={() => {
-                void auditoriaMutation.mutateAsync()
+                void auditoriaMutation.mutateAsync();
               }}
             >
               Gerar PDF
@@ -362,10 +486,12 @@ export function RelatoriosPage() {
               style={{ width: 380 }}
               value={historicoPatrimonioId}
               onChange={setHistoricoPatrimonioId}
-              options={(optionsQuery.data?.patrimonios ?? []).map((patrimonio) => ({
-                label: `${patrimonio.tombo} - ${patrimonio.item} - ${patrimonio.status}`,
-                value: patrimonio.id,
-              }))}
+              options={(optionsQuery.data?.patrimonios ?? []).map(
+                (patrimonio) => ({
+                  label: `${patrimonio.tombo} - ${patrimonio.item} - ${patrimonio.status}`,
+                  value: patrimonio.id,
+                }),
+              )}
               optionFilterProp="label"
             />
             <Button
@@ -373,7 +499,7 @@ export function RelatoriosPage() {
               disabled={!historicoPatrimonioId}
               loading={historicoMutation.isPending}
               onClick={() => {
-                void historicoMutation.mutateAsync()
+                void historicoMutation.mutateAsync();
               }}
             >
               Gerar PDF
@@ -382,5 +508,5 @@ export function RelatoriosPage() {
         </Card>
       </Space>
     </AppLayout>
-  )
+  );
 }
