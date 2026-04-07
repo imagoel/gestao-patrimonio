@@ -1,0 +1,17 @@
+.DS_Store
+.env
+AGENTS.md
+docs/
+.idea/
+.vscode/
+coverage/
+dist/
+node_modules/
+frontend/dist/
+frontend/node_modules/
+backend/dist/
+backend/node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
