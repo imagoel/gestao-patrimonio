@@ -1,5 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { AppValidationPipe } from './common/pipes/validation.pipe';
 
 async function bootstrap() {
@@ -11,6 +13,8 @@ async function bootstrap() {
     credentials: true,
   });
   app.useGlobalPipes(new AppValidationPipe());
+  app.useGlobalFilters(new HttpExceptionFilter());
+  app.useGlobalInterceptors(new ResponseInterceptor());
 
   const port = Number(process.env.PORT ?? 3000);
 

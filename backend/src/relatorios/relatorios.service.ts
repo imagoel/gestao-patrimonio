@@ -7,6 +7,11 @@ import {
 } from '@prisma/client';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 import { assertCanEmitRelatorios } from '../common/permissions/relatorios.permissions';
+import { formatDateTimePtBr } from '../common/utils/date.utils';
+import {
+  normalizeDisplayText,
+  normalizeOptionalText,
+} from '../common/utils/string.utils';
 import { PrismaService } from '../prisma/prisma.service';
 import { RelatorioAuditoriaMovimentacaoDto } from './dto/relatorio-auditoria-movimentacao.dto';
 import { RelatorioBaixaDto } from './dto/relatorio-baixa.dto';
@@ -15,6 +20,7 @@ import { RelatorioPatrimonioDto } from './dto/relatorio-patrimonio.dto';
 import { buildAuditoriaMovimentacaoReportDefinition } from './pdf/auditoria-movimentacao-report.builder';
 import { buildBaixaReportDefinition } from './pdf/baixa-report.builder';
 import {
+  buildPatrimonioByLocationReportDefinition,
   buildPatrimonioHistoricoReportDefinition,
   buildPatrimonioReportDefinition,
 } from './pdf/patrimonio-report.builder';
@@ -26,6 +32,12 @@ const pdfFonts = require('pdfmake/build/vfs_fonts');
 pdfMake.addVirtualFileSystem(pdfFonts);
 
 type PdfDocumentDefinition = Record<string, unknown>;
+
+const MOVIMENTACAO_PENDENTE_STATUSES = [
+  StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA,
+  StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO,
+  StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO,
+] as const;
 
 const patrimonioReportSelect = {
   id: true,
@@ -214,85 +226,84 @@ export class RelatoriosService {
       patrimonios,
       acoesAuditoriaMovimentacao,
       usuariosAuditoriaMovimentacao,
-    ] =
-      await this.prismaService.$transaction([
-        this.prismaService.secretaria.findMany({
-          where: {
-            ativo: true,
-          },
-          orderBy: {
-            sigla: 'asc',
-          },
-          select: {
-            id: true,
-            sigla: true,
-            nomeCompleto: true,
-          },
-        }),
-        this.prismaService.responsavel.findMany({
-          where: {
-            ativo: true,
-          },
-          orderBy: {
-            nome: 'asc',
-          },
-          select: {
-            id: true,
-            nome: true,
-            setor: true,
-            secretariaId: true,
-            secretaria: {
-              select: {
-                id: true,
-                sigla: true,
-                nomeCompleto: true,
-              },
+    ] = await this.prismaService.$transaction([
+      this.prismaService.secretaria.findMany({
+        where: {
+          ativo: true,
+        },
+        orderBy: {
+          sigla: 'asc',
+        },
+        select: {
+          id: true,
+          sigla: true,
+          nomeCompleto: true,
+        },
+      }),
+      this.prismaService.responsavel.findMany({
+        where: {
+          ativo: true,
+        },
+        orderBy: {
+          nome: 'asc',
+        },
+        select: {
+          id: true,
+          nome: true,
+          setor: true,
+          secretariaId: true,
+          secretaria: {
+            select: {
+              id: true,
+              sigla: true,
+              nomeCompleto: true,
             },
           },
-        }),
-        this.prismaService.patrimonio.findMany({
-          orderBy: {
-            tombo: 'asc',
-          },
-          select: {
-            id: true,
-            tombo: true,
-            item: true,
-            status: true,
-          },
-        }),
-        this.prismaService.auditoria.findMany({
-          where: {
-            entidade: 'Movimentacao',
-          },
-          distinct: ['acao'],
-          orderBy: {
-            acao: 'asc',
-          },
-          select: {
-            acao: true,
-          },
-        }),
-        this.prismaService.usuario.findMany({
-          where: {
-            auditorias: {
-              some: {
-                entidade: 'Movimentacao',
-              },
+        },
+      }),
+      this.prismaService.patrimonio.findMany({
+        orderBy: {
+          tombo: 'asc',
+        },
+        select: {
+          id: true,
+          tombo: true,
+          item: true,
+          status: true,
+        },
+      }),
+      this.prismaService.auditoria.findMany({
+        where: {
+          entidade: 'Movimentacao',
+        },
+        distinct: ['acao'],
+        orderBy: {
+          acao: 'asc',
+        },
+        select: {
+          acao: true,
+        },
+      }),
+      this.prismaService.usuario.findMany({
+        where: {
+          auditorias: {
+            some: {
+              entidade: 'Movimentacao',
             },
           },
-          orderBy: {
-            nome: 'asc',
-          },
-          select: {
-            id: true,
-            nome: true,
-            email: true,
-            perfil: true,
-            secretariaId: true,
-          },
-        }),
-      ]);
+        },
+        orderBy: {
+          nome: 'asc',
+        },
+        select: {
+          id: true,
+          nome: true,
+          email: true,
+          perfil: true,
+          secretariaId: true,
+        },
+      }),
+    ]);
 
     return {
       secretarias,
@@ -314,23 +325,7 @@ export class RelatoriosService {
   ) {
     assertCanEmitRelatorios(actor);
 
-    const where: Prisma.PatrimonioWhereInput = {
-      ...(filters.secretariaAtualId
-        ? { secretariaAtualId: filters.secretariaAtualId }
-        : {}),
-      ...(filters.responsavelAtualId
-        ? { responsavelAtualId: filters.responsavelAtualId }
-        : {}),
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.localizacaoAtual
-        ? {
-            localizacaoAtual: {
-              contains: filters.localizacaoAtual.trim(),
-              mode: 'insensitive',
-            },
-          }
-        : {}),
-    };
+    const where = this.buildPatrimonioWhere(filters);
 
     const items = await this.prismaService.patrimonio.findMany({
       where,
@@ -342,7 +337,111 @@ export class RelatoriosService {
       titulo: 'Relatorio de Patrimonio',
       subtitulo: 'Bens patrimoniais conforme os filtros selecionados.',
       filtros: this.buildPatrimonioFiltersSummary(filters),
-      geradoEm: this.formatDateTime(new Date()),
+      geradoEm: formatDateTimePtBr(new Date()),
+      geradoPor: actor.nome,
+      total: items.length,
+      rows: items.map((item) => ({
+        tombo: item.tombo,
+        item: item.item,
+        secretaria: item.secretariaAtual.sigla,
+        responsavel: `${item.responsavelAtual.nome} - ${item.responsavelAtual.setor}`,
+        localizacao: item.localizacaoAtual,
+        status: item.status,
+      })),
+    });
+
+    return this.renderPdfBuffer(doc);
+  }
+
+  async gerarRelatorioBensPorLocalizacao(
+    filters: RelatorioPatrimonioDto,
+    actor: AuthenticatedUser,
+  ) {
+    assertCanEmitRelatorios(actor);
+
+    const items = await this.prismaService.patrimonio.findMany({
+      where: this.buildPatrimonioWhere(filters),
+      orderBy: [
+        { localizacaoAtual: 'asc' },
+        { secretariaAtual: { sigla: 'asc' } },
+        { tombo: 'asc' },
+      ],
+      select: patrimonioReportSelect,
+    });
+
+    const groups = Array.from(
+      items.reduce<
+        Map<
+          string,
+          Array<{
+            tombo: string;
+            item: string;
+            secretaria: string;
+            responsavel: string;
+            status: StatusItem;
+          }>
+        >
+      >((accumulator, item) => {
+        const groupKey = normalizeDisplayText(item.localizacaoAtual);
+        const current = accumulator.get(groupKey) ?? [];
+
+        current.push({
+          tombo: item.tombo,
+          item: item.item,
+          secretaria: item.secretariaAtual.sigla,
+          responsavel: `${item.responsavelAtual.nome} - ${item.responsavelAtual.setor}`,
+          status: item.status,
+        });
+        accumulator.set(groupKey, current);
+
+        return accumulator;
+      }, new Map()),
+    ).map(([localizacao, rows]) => ({
+      localizacao,
+      total: rows.length,
+      rows,
+    }));
+
+    const doc = buildPatrimonioByLocationReportDefinition({
+      titulo: 'Relatorio de Bens por Localizacao Fisica',
+      subtitulo:
+        'Bens patrimoniais agrupados pela localizacao fisica atualmente informada.',
+      filtros: this.buildPatrimonioFiltersSummary(filters),
+      geradoEm: formatDateTimePtBr(new Date()),
+      geradoPor: actor.nome,
+      total: items.length,
+      totalLocalizacoes: groups.length,
+      groups,
+    });
+
+    return this.renderPdfBuffer(doc);
+  }
+
+  async gerarRelatorioBensInativos(
+    filters: RelatorioPatrimonioDto,
+    actor: AuthenticatedUser,
+  ) {
+    assertCanEmitRelatorios(actor);
+
+    const where = this.buildPatrimonioWhere(filters, {
+      status: StatusItem.INATIVO,
+    });
+
+    const items = await this.prismaService.patrimonio.findMany({
+      where,
+      orderBy: [{ secretariaAtual: { sigla: 'asc' } }, { tombo: 'asc' }],
+      select: patrimonioReportSelect,
+    });
+
+    const doc = buildPatrimonioReportDefinition({
+      titulo: 'Relatorio de Bens Inativos',
+      subtitulo:
+        'Bens patrimoniais atualmente marcados como inativos no sistema.',
+      filtros: this.buildPatrimonioFiltersSummary({
+        ...filters,
+        status: StatusItem.INATIVO,
+      }),
+      geradoEm: formatDateTimePtBr(new Date()),
       geradoPor: actor.nome,
       total: items.length,
       rows: items.map((item) => ({
@@ -364,21 +463,7 @@ export class RelatoriosService {
   ) {
     assertCanEmitRelatorios(actor);
 
-    const where: Prisma.MovimentacaoWhereInput = {
-      ...(filters.status ? { status: filters.status } : {}),
-      ...(filters.secretariaId
-        ? {
-            OR: [
-              {
-                secretariaOrigemId: filters.secretariaId,
-              },
-              {
-                secretariaDestinoId: filters.secretariaId,
-              },
-            ],
-          }
-        : {}),
-    };
+    const where = this.buildMovimentacaoWhere(filters);
 
     const items = await this.prismaService.movimentacao.findMany({
       where,
@@ -391,7 +476,7 @@ export class RelatoriosService {
       subtitulo:
         'Movimentacoes patrimoniais com foco em acompanhamento operacional.',
       filtros: this.buildMovimentacaoFiltersSummary(filters),
-      geradoEm: this.formatDateTime(new Date()),
+      geradoEm: formatDateTimePtBr(new Date()),
       geradoPor: actor.nome,
       total: items.length,
       rows: items.map((item) => ({
@@ -401,7 +486,92 @@ export class RelatoriosService {
         destino: item.secretariaDestino.sigla,
         status: item.status,
         solicitante: item.solicitante.nome,
-        solicitadoEm: this.formatDateTime(item.solicitadoEm),
+        solicitadoEm: formatDateTimePtBr(item.solicitadoEm),
+      })),
+    });
+
+    return this.renderPdfBuffer(doc);
+  }
+
+  async gerarRelatorioMovimentacoesPendentes(
+    filters: RelatorioMovimentacaoDto,
+    actor: AuthenticatedUser,
+  ) {
+    assertCanEmitRelatorios(actor);
+
+    const items = await this.prismaService.movimentacao.findMany({
+      where: this.buildMovimentacaoWhere(filters, {
+        status: {
+          in: [...MOVIMENTACAO_PENDENTE_STATUSES],
+        },
+      }),
+      orderBy: [{ solicitadoEm: 'desc' }],
+      select: movimentacaoReportSelect,
+    });
+
+    const doc = buildMovimentacaoReportDefinition({
+      titulo: 'Relatorio de Movimentacoes Pendentes',
+      subtitulo:
+        'Movimentacoes ainda em andamento no fluxo operacional patrimonial.',
+      filtros: this.buildMovimentacaoFiltersSummary(
+        {
+          secretariaId: filters.secretariaId,
+        },
+        ['Somente movimentacoes pendentes'],
+      ),
+      geradoEm: formatDateTimePtBr(new Date()),
+      geradoPor: actor.nome,
+      total: items.length,
+      rows: items.map((item) => ({
+        tombo: item.patrimonio.tombo,
+        item: item.patrimonio.item,
+        origem: item.secretariaOrigem.sigla,
+        destino: item.secretariaDestino.sigla,
+        status: item.status,
+        solicitante: item.solicitante.nome,
+        solicitadoEm: formatDateTimePtBr(item.solicitadoEm),
+      })),
+    });
+
+    return this.renderPdfBuffer(doc);
+  }
+
+  async gerarRelatorioMovimentacoesConcluidas(
+    filters: RelatorioMovimentacaoDto,
+    actor: AuthenticatedUser,
+  ) {
+    assertCanEmitRelatorios(actor);
+
+    const items = await this.prismaService.movimentacao.findMany({
+      where: this.buildMovimentacaoWhere(filters, {
+        status: StatusMovimentacao.CONCLUIDA,
+      }),
+      orderBy: [{ solicitadoEm: 'desc' }],
+      select: movimentacaoReportSelect,
+    });
+
+    const doc = buildMovimentacaoReportDefinition({
+      titulo: 'Relatorio de Movimentacoes Concluidas',
+      subtitulo:
+        'Movimentacoes patrimoniais finalizadas com aprovacao do patrimonio.',
+      filtros: this.buildMovimentacaoFiltersSummary(
+        {
+          secretariaId: filters.secretariaId,
+          status: StatusMovimentacao.CONCLUIDA,
+        },
+        [],
+      ),
+      geradoEm: formatDateTimePtBr(new Date()),
+      geradoPor: actor.nome,
+      total: items.length,
+      rows: items.map((item) => ({
+        tombo: item.patrimonio.tombo,
+        item: item.patrimonio.item,
+        origem: item.secretariaOrigem.sigla,
+        destino: item.secretariaDestino.sigla,
+        status: item.status,
+        solicitante: item.solicitante.nome,
+        solicitadoEm: formatDateTimePtBr(item.solicitadoEm),
       })),
     });
 
@@ -433,10 +603,9 @@ export class RelatoriosService {
 
     const doc = buildBaixaReportDefinition({
       titulo: 'Relatorio de Baixas Patrimoniais',
-      subtitulo:
-        'Itens baixados e respectivos motivos registrados no sistema.',
+      subtitulo: 'Itens baixados e respectivos motivos registrados no sistema.',
       filtros: this.buildBaixaFiltersSummary(filters),
-      geradoEm: this.formatDateTime(new Date()),
+      geradoEm: formatDateTimePtBr(new Date()),
       geradoPor: actor.nome,
       total: items.length,
       rows: items.map((item) => ({
@@ -445,7 +614,7 @@ export class RelatoriosService {
         secretaria: item.patrimonio.secretariaAtual.sigla,
         motivo: item.motivo,
         usuario: item.usuario.nome,
-        baixadoEm: this.formatDateTime(item.baixadoEm),
+        baixadoEm: formatDateTimePtBr(item.baixadoEm),
       })),
     });
 
@@ -482,7 +651,7 @@ export class RelatoriosService {
     const doc = buildPatrimonioHistoricoReportDefinition({
       titulo: 'Historico do Patrimonio',
       subtitulo: 'Trajetoria consolidada do bem no sistema.',
-      geradoEm: this.formatDateTime(new Date()),
+      geradoEm: formatDateTimePtBr(new Date()),
       geradoPor: actor.nome,
       patrimonio: {
         tombo: patrimonio.tombo,
@@ -501,7 +670,7 @@ export class RelatoriosService {
           : item.baixaPatrimonial
             ? `Baixa ${item.baixaPatrimonial.motivo}`
             : 'Atualizacao direta',
-        criadoEm: this.formatDateTime(item.criadoEm),
+        criadoEm: formatDateTimePtBr(item.criadoEm),
       })),
     });
 
@@ -572,18 +741,19 @@ export class RelatoriosService {
       subtitulo:
         'Eventos auditaveis do fluxo de movimentacao patrimonial no sistema.',
       filtros: this.buildAuditoriaMovimentacaoFiltersSummary(filters),
-      geradoEm: this.formatDateTime(new Date()),
+      geradoEm: formatDateTimePtBr(new Date()),
       geradoPor: actor.nome,
       total: auditorias.length,
       rows: auditorias.map((item) => {
         const movimentacao = movimentacaoMap.get(item.entidadeId);
 
         return {
-          dataHora: this.formatDateTime(item.createdAt),
+          dataHora: formatDateTimePtBr(item.createdAt),
           acao: item.acao,
           usuario: item.usuario?.nome ?? 'Sistema',
           tombo: movimentacao?.patrimonio.tombo ?? '--',
-          item: movimentacao?.patrimonio.item ?? 'Movimentacao sem item vinculado',
+          item:
+            movimentacao?.patrimonio.item ?? 'Movimentacao sem item vinculado',
           movimentacao: movimentacao
             ? `${movimentacao.secretariaOrigem.sigla} -> ${movimentacao.secretariaDestino.sigla} (${movimentacao.status})`
             : `ID ${item.entidadeId}`,
@@ -595,7 +765,58 @@ export class RelatoriosService {
     return this.renderPdfBuffer(doc);
   }
 
-  private buildPatrimonioFiltersSummary(filters: RelatorioPatrimonioDto) {
+  private buildPatrimonioWhere(
+    filters: RelatorioPatrimonioDto,
+    overrides?: Prisma.PatrimonioWhereInput,
+  ): Prisma.PatrimonioWhereInput {
+    const localizacaoAtual = normalizeOptionalText(filters.localizacaoAtual);
+
+    return {
+      ...(filters.secretariaAtualId
+        ? { secretariaAtualId: filters.secretariaAtualId }
+        : {}),
+      ...(filters.responsavelAtualId
+        ? { responsavelAtualId: filters.responsavelAtualId }
+        : {}),
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(localizacaoAtual
+        ? {
+            localizacaoAtual: {
+              contains: localizacaoAtual,
+              mode: 'insensitive',
+            },
+          }
+        : {}),
+      ...overrides,
+    };
+  }
+
+  private buildMovimentacaoWhere(
+    filters: RelatorioMovimentacaoDto,
+    overrides?: Prisma.MovimentacaoWhereInput,
+  ): Prisma.MovimentacaoWhereInput {
+    return {
+      ...(filters.status ? { status: filters.status } : {}),
+      ...(filters.secretariaId
+        ? {
+            OR: [
+              {
+                secretariaOrigemId: filters.secretariaId,
+              },
+              {
+                secretariaDestinoId: filters.secretariaId,
+              },
+            ],
+          }
+        : {}),
+      ...overrides,
+    };
+  }
+
+  private buildPatrimonioFiltersSummary(
+    filters: RelatorioPatrimonioDto,
+    extraSummary: string[] = [],
+  ) {
     const summary: string[] = [];
 
     if (filters.secretariaAtualId) {
@@ -610,14 +831,19 @@ export class RelatoriosService {
       summary.push(`Status ${filters.status}`);
     }
 
-    if (filters.localizacaoAtual?.trim()) {
-      summary.push(`Localizacao contendo "${filters.localizacaoAtual.trim()}"`);
+    const localizacaoAtual = normalizeOptionalText(filters.localizacaoAtual);
+
+    if (localizacaoAtual) {
+      summary.push(`Localizacao contendo "${localizacaoAtual}"`);
     }
 
-    return summary;
+    return [...summary, ...extraSummary];
   }
 
-  private buildMovimentacaoFiltersSummary(filters: RelatorioMovimentacaoDto) {
+  private buildMovimentacaoFiltersSummary(
+    filters: RelatorioMovimentacaoDto,
+    extraSummary: string[] = [],
+  ) {
     const summary: string[] = [];
 
     if (filters.secretariaId) {
@@ -628,7 +854,7 @@ export class RelatoriosService {
       summary.push(`Status ${filters.status}`);
     }
 
-    return summary;
+    return [...summary, ...extraSummary];
   }
 
   private buildBaixaFiltersSummary(filters: RelatorioBaixaDto) {
@@ -713,13 +939,5 @@ export class RelatoriosService {
         reject(error);
       }
     });
-  }
-
-  private formatDateTime(value: Date) {
-    return new Intl.DateTimeFormat('pt-BR', {
-      dateStyle: 'short',
-      timeStyle: 'short',
-      timeZone: 'America/Sao_Paulo',
-    }).format(value);
   }
 }

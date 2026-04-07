@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { Perfil } from '@prisma/client';
 import type { Response } from 'express';
 import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
@@ -13,6 +6,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { buildIsoDateStamp } from '../common/utils/date.utils';
 import { RelatorioAuditoriaMovimentacaoDto } from './dto/relatorio-auditoria-movimentacao.dto';
 import { RelatorioBaixaDto } from './dto/relatorio-baixa.dto';
 import { RelatorioMovimentacaoDto } from './dto/relatorio-movimentacao.dto';
@@ -41,12 +35,47 @@ export class RelatoriosController {
       actor,
     );
 
-    response.setHeader(
-      'Content-Disposition',
-      `attachment; filename="relatorio-patrimonio-${this.buildDateStamp()}.pdf"`,
+    this.sendPdf(
+      response,
+      `relatorio-patrimonio-${this.buildDateStamp()}.pdf`,
+      pdf,
     );
-    response.setHeader('Content-Type', 'application/pdf');
-    response.send(pdf);
+  }
+
+  @Get('bens-por-localizacao')
+  async gerarRelatorioBensPorLocalizacao(
+    @Query() filters: RelatorioPatrimonioDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res() response: Response,
+  ) {
+    const pdf = await this.relatoriosService.gerarRelatorioBensPorLocalizacao(
+      filters,
+      actor,
+    );
+
+    this.sendPdf(
+      response,
+      `relatorio-bens-por-localizacao-${this.buildDateStamp()}.pdf`,
+      pdf,
+    );
+  }
+
+  @Get('bens-inativos')
+  async gerarRelatorioBensInativos(
+    @Query() filters: RelatorioPatrimonioDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res() response: Response,
+  ) {
+    const pdf = await this.relatoriosService.gerarRelatorioBensInativos(
+      filters,
+      actor,
+    );
+
+    this.sendPdf(
+      response,
+      `relatorio-bens-inativos-${this.buildDateStamp()}.pdf`,
+      pdf,
+    );
   }
 
   @Get('movimentacoes')
@@ -60,12 +89,49 @@ export class RelatoriosController {
       actor,
     );
 
-    response.setHeader(
-      'Content-Disposition',
-      `attachment; filename="relatorio-movimentacoes-${this.buildDateStamp()}.pdf"`,
+    this.sendPdf(
+      response,
+      `relatorio-movimentacoes-${this.buildDateStamp()}.pdf`,
+      pdf,
     );
-    response.setHeader('Content-Type', 'application/pdf');
-    response.send(pdf);
+  }
+
+  @Get('movimentacoes-pendentes')
+  async gerarRelatorioMovimentacoesPendentes(
+    @Query() filters: RelatorioMovimentacaoDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res() response: Response,
+  ) {
+    const pdf =
+      await this.relatoriosService.gerarRelatorioMovimentacoesPendentes(
+        filters,
+        actor,
+      );
+
+    this.sendPdf(
+      response,
+      `relatorio-movimentacoes-pendentes-${this.buildDateStamp()}.pdf`,
+      pdf,
+    );
+  }
+
+  @Get('movimentacoes-concluidas')
+  async gerarRelatorioMovimentacoesConcluidas(
+    @Query() filters: RelatorioMovimentacaoDto,
+    @CurrentUser() actor: AuthenticatedUser,
+    @Res() response: Response,
+  ) {
+    const pdf =
+      await this.relatoriosService.gerarRelatorioMovimentacoesConcluidas(
+        filters,
+        actor,
+      );
+
+    this.sendPdf(
+      response,
+      `relatorio-movimentacoes-concluidas-${this.buildDateStamp()}.pdf`,
+      pdf,
+    );
   }
 
   @Get('baixas')
@@ -79,12 +145,11 @@ export class RelatoriosController {
       actor,
     );
 
-    response.setHeader(
-      'Content-Disposition',
-      `attachment; filename="relatorio-baixas-${this.buildDateStamp()}.pdf"`,
+    this.sendPdf(
+      response,
+      `relatorio-baixas-${this.buildDateStamp()}.pdf`,
+      pdf,
     );
-    response.setHeader('Content-Type', 'application/pdf');
-    response.send(pdf);
   }
 
   @Get('auditoria-movimentacoes')
@@ -93,17 +158,17 @@ export class RelatoriosController {
     @CurrentUser() actor: AuthenticatedUser,
     @Res() response: Response,
   ) {
-    const pdf = await this.relatoriosService.gerarRelatorioAuditoriaMovimentacoes(
-      filters,
-      actor,
-    );
+    const pdf =
+      await this.relatoriosService.gerarRelatorioAuditoriaMovimentacoes(
+        filters,
+        actor,
+      );
 
-    response.setHeader(
-      'Content-Disposition',
-      `attachment; filename="relatorio-auditoria-movimentacoes-${this.buildDateStamp()}.pdf"`,
+    this.sendPdf(
+      response,
+      `relatorio-auditoria-movimentacoes-${this.buildDateStamp()}.pdf`,
+      pdf,
     );
-    response.setHeader('Content-Type', 'application/pdf');
-    response.send(pdf);
   }
 
   @Get('patrimonios/:id/historico')
@@ -117,15 +182,23 @@ export class RelatoriosController {
       actor,
     );
 
-    response.setHeader(
-      'Content-Disposition',
-      `attachment; filename="relatorio-historico-patrimonio-${this.buildDateStamp()}.pdf"`,
+    this.sendPdf(
+      response,
+      `relatorio-historico-patrimonio-${this.buildDateStamp()}.pdf`,
+      pdf,
     );
-    response.setHeader('Content-Type', 'application/pdf');
-    response.send(pdf);
   }
 
   private buildDateStamp() {
-    return new Date().toISOString().slice(0, 10);
+    return buildIsoDateStamp();
+  }
+
+  private sendPdf(response: Response, filename: string, pdf: Buffer) {
+    response.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filename}"`,
+    );
+    response.setHeader('Content-Type', 'application/pdf');
+    response.send(pdf);
   }
 }

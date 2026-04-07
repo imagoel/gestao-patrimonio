@@ -27,6 +27,23 @@ interface BuildPatrimonioReportInput {
   rows: PatrimonioReportRow[];
 }
 
+interface PatrimonioByLocationGroup {
+  localizacao: string;
+  total: number;
+  rows: Omit<PatrimonioReportRow, 'localizacao'>[];
+}
+
+interface BuildPatrimonioByLocationReportInput {
+  titulo: string;
+  subtitulo: string;
+  filtros: string[];
+  geradoEm: string;
+  geradoPor: string;
+  total: number;
+  totalLocalizacoes: number;
+  groups: PatrimonioByLocationGroup[];
+}
+
 interface BuildHistoricoReportInput {
   titulo: string;
   subtitulo: string;
@@ -45,10 +62,10 @@ interface BuildHistoricoReportInput {
 
 function buildFiltersSummary(filters: string[]) {
   if (!filters.length) {
-    return 'Filtros aplicados: nenhum.'
+    return 'Filtros aplicados: nenhum.';
   }
 
-  return `Filtros aplicados: ${filters.join(' | ')}.`
+  return `Filtros aplicados: ${filters.join(' | ')}.`;
 }
 
 function buildEmptyRow(message: string, colSpan: number) {
@@ -63,10 +80,8 @@ function buildEmptyRow(message: string, colSpan: number) {
   ];
 }
 
-export function buildPatrimonioReportDefinition(
-  input: BuildPatrimonioReportInput,
-): PdfDocumentDefinition {
-  const body = [
+function buildPatrimonioBody(rows: PatrimonioReportRow[]) {
+  return [
     [
       { text: 'Tombo', style: 'tableHeader' },
       { text: 'Item', style: 'tableHeader' },
@@ -75,8 +90,8 @@ export function buildPatrimonioReportDefinition(
       { text: 'Localizacao', style: 'tableHeader' },
       { text: 'Status', style: 'tableHeader' },
     ],
-    ...(input.rows.length
-      ? input.rows.map((row) => [
+    ...(rows.length
+      ? rows.map((row) => [
           row.tombo,
           row.item,
           row.secretaria,
@@ -84,8 +99,40 @@ export function buildPatrimonioReportDefinition(
           row.localizacao,
           row.status,
         ])
-      : [buildEmptyRow('Nenhum patrimonio encontrado para os filtros informados.', 6)]),
+      : [
+          buildEmptyRow(
+            'Nenhum patrimonio encontrado para os filtros informados.',
+            6,
+          ),
+        ]),
   ];
+}
+
+function buildPatrimonioByLocationBody(
+  rows: Omit<PatrimonioReportRow, 'localizacao'>[],
+) {
+  return [
+    [
+      { text: 'Tombo', style: 'tableHeader' },
+      { text: 'Item', style: 'tableHeader' },
+      { text: 'Secretaria', style: 'tableHeader' },
+      { text: 'Responsavel', style: 'tableHeader' },
+      { text: 'Status', style: 'tableHeader' },
+    ],
+    ...rows.map((row) => [
+      row.tombo,
+      row.item,
+      row.secretaria,
+      row.responsavel,
+      row.status,
+    ]),
+  ];
+}
+
+export function buildPatrimonioReportDefinition(
+  input: BuildPatrimonioReportInput,
+): PdfDocumentDefinition {
+  const body = buildPatrimonioBody(input.rows);
 
   return {
     pageOrientation: 'landscape',
@@ -124,6 +171,84 @@ export function buildPatrimonioReportDefinition(
         fontSize: 11,
         color: '#666666',
         margin: [0, 0, 0, 8],
+      },
+      tableHeader: {
+        bold: true,
+        fillColor: '#f0f0f0',
+      },
+      footer: {
+        margin: [0, 12, 0, 0],
+        fontSize: 8,
+        color: '#666666',
+      },
+    },
+  };
+}
+
+export function buildPatrimonioByLocationReportDefinition(
+  input: BuildPatrimonioByLocationReportInput,
+): PdfDocumentDefinition {
+  const content: Record<string, unknown>[] = [
+    { text: input.titulo, style: 'title' },
+    { text: input.subtitulo, style: 'subtitle' },
+    {
+      text: `${buildFiltersSummary(input.filtros)} Total de registros: ${input.total}. Localizacoes agrupadas: ${input.totalLocalizacoes}.`,
+      margin: [0, 0, 0, 12],
+    },
+  ];
+
+  if (!input.groups.length) {
+    content.push({
+      text: 'Nenhum patrimonio encontrado para os filtros informados.',
+      alignment: 'center',
+      margin: [0, 16, 0, 16],
+    });
+  } else {
+    input.groups.forEach((group) => {
+      content.push({
+        text: `Localizacao: ${group.localizacao} (${group.total} item(ns))`,
+        style: 'sectionTitle',
+      });
+      content.push({
+        table: {
+          headerRows: 1,
+          widths: [52, '*', 80, 120, 70],
+          body: buildPatrimonioByLocationBody(group.rows),
+        },
+        layout: 'lightHorizontalLines',
+        margin: [0, 0, 0, 12],
+      });
+    });
+  }
+
+  content.push({
+    text: `Gerado por ${input.geradoPor} em ${input.geradoEm}.`,
+    style: 'footer',
+  });
+
+  return {
+    pageOrientation: 'landscape',
+    pageMargins: [32, 32, 32, 32],
+    content,
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 9,
+    },
+    styles: {
+      title: {
+        fontSize: 16,
+        bold: true,
+        margin: [0, 0, 0, 4],
+      },
+      subtitle: {
+        fontSize: 11,
+        color: '#666666',
+        margin: [0, 0, 0, 8],
+      },
+      sectionTitle: {
+        bold: true,
+        fontSize: 11,
+        margin: [0, 8, 0, 6],
       },
       tableHeader: {
         bold: true,
@@ -184,7 +309,10 @@ export function buildPatrimonioHistoricoReportDefinition(
               text: `Localizacao: ${input.patrimonio.localizacao}`,
               margin: [0, 0, 0, 4],
             },
-            { text: `Status: ${input.patrimonio.status}`, margin: [0, 0, 0, 4] },
+            {
+              text: `Status: ${input.patrimonio.status}`,
+              margin: [0, 0, 0, 4],
+            },
           ],
         ],
         columnGap: 24,

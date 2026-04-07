@@ -1,9 +1,5 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import {
-  Perfil,
-  StatusItem,
-  StatusMovimentacao,
-} from '@prisma/client';
+import { Perfil, StatusItem, StatusMovimentacao } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { RelatoriosService } from './relatorios.service';
 
@@ -119,6 +115,119 @@ describe('RelatoriosService', () => {
     expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
   });
 
+  it('gera PDF dedicado de bens por localizacao', async () => {
+    prisma.patrimonio.findMany.mockResolvedValueOnce([
+      {
+        id: 'pat-1',
+        tombo: '00025',
+        item: 'Notebook Dell',
+        localizacaoAtual: 'Sala 01',
+        status: StatusItem.ATIVO,
+        secretariaAtual: {
+          id: 'sec-1',
+          sigla: 'SEMED',
+          nomeCompleto: 'Secretaria de Educacao',
+        },
+        responsavelAtual: {
+          id: 'resp-1',
+          nome: 'Maria',
+          setor: 'Patrimonio',
+        },
+      },
+      {
+        id: 'pat-2',
+        tombo: '00026',
+        item: 'Projetor',
+        localizacaoAtual: 'Sala 02',
+        status: StatusItem.INATIVO,
+        secretariaAtual: {
+          id: 'sec-1',
+          sigla: 'SEMED',
+          nomeCompleto: 'Secretaria de Educacao',
+        },
+        responsavelAtual: {
+          id: 'resp-2',
+          nome: 'Joao',
+          setor: 'Financeiro',
+        },
+      },
+    ] as never);
+
+    const buffer = await service.gerarRelatorioBensPorLocalizacao({}, admin);
+
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+  });
+
+  it('gera PDF dedicado de bens inativos com status fixo', async () => {
+    prisma.patrimonio.findMany.mockResolvedValueOnce([] as never);
+
+    const buffer = await service.gerarRelatorioBensInativos(
+      {
+        status: StatusItem.ATIVO,
+      },
+      admin,
+    );
+
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(prisma.patrimonio.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: StatusItem.INATIVO,
+        }),
+      }),
+    );
+  });
+
+  it('gera PDF dedicado de movimentacoes pendentes com statuses operacionais', async () => {
+    prisma.movimentacao.findMany.mockResolvedValueOnce([] as never);
+
+    const buffer = await service.gerarRelatorioMovimentacoesPendentes(
+      {
+        status: StatusMovimentacao.CONCLUIDA,
+      },
+      admin,
+    );
+
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(prisma.movimentacao.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: {
+            in: [
+              StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA,
+              StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO,
+              StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO,
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('gera PDF dedicado de movimentacoes concluidas com status fixo', async () => {
+    prisma.movimentacao.findMany.mockResolvedValueOnce([] as never);
+
+    const buffer = await service.gerarRelatorioMovimentacoesConcluidas(
+      {
+        status: StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA,
+      },
+      admin,
+    );
+
+    expect(Buffer.isBuffer(buffer)).toBe(true);
+    expect(buffer.subarray(0, 4).toString()).toBe('%PDF');
+    expect(prisma.movimentacao.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          status: StatusMovimentacao.CONCLUIDA,
+        }),
+      }),
+    );
+  });
+
   it('gera PDF de auditoria de movimentacoes para administrador', async () => {
     prisma.auditoria.findMany.mockResolvedValueOnce([
       {
@@ -168,9 +277,9 @@ describe('RelatoriosService', () => {
   });
 
   it('bloqueia emissao de relatorios para usuario sem permissao', async () => {
-    await expect(service.gerarRelatorioBaixas({}, consulta)).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.gerarRelatorioBaixas({}, consulta),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('falha quando o patrimonio do historico nao existe', async () => {
