@@ -15,35 +15,23 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
+import { createTableLocale } from '../../components/shared/TableEmpty'
+import { useAuth } from '../../hooks/useAuth'
 import { usePermissao } from '../../hooks/usePermissao'
 import { notificacoesService } from '../../services/notificacoes.service'
 import { Perfil, StatusMovimentacao } from '../../types/enums'
 import type { NotificacaoItem } from '../../types/notificacoes.types'
-import { formatDateTime } from '../../utils/formatters'
-
-function getStatusColor(status: StatusMovimentacao) {
-  switch (status) {
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA:
-      return 'orange'
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO:
-      return 'gold'
-    case StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO:
-      return 'blue'
-    case StatusMovimentacao.CONCLUIDA:
-      return 'green'
-    case StatusMovimentacao.REJEITADA:
-      return 'red'
-    case StatusMovimentacao.CANCELADA:
-      return 'default'
-    case StatusMovimentacao.APROVADA:
-      return 'cyan'
-    default:
-      return 'purple'
-  }
-}
+import { formatDateTime, formatMovimentacaoStatus } from '../../utils/formatters'
+import {
+  getMovimentacaoNextStepInfo,
+  getMovimentacaoStatusColor,
+  getMovimentacaoViewerActionInfo,
+} from '../../utils/movimentacao-ui'
 
 export function NotificacoesPage() {
   const navigate = useNavigate()
+  const { session } = useAuth()
   const { hasPerfil } = usePermissao()
   const canAccess = hasPerfil(
     Perfil.ADMINISTRADOR,
@@ -59,6 +47,18 @@ export function NotificacoesPage() {
     refetchInterval: 60000,
   })
 
+  const orderedItems = useMemo(() => {
+    const items = [...(notificacoesQuery.data?.items ?? [])]
+
+    return items.sort((left, right) => {
+      if (left.requiresAction !== right.requiresAction) {
+        return left.requiresAction ? -1 : 1
+      }
+
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
+    })
+  }, [notificacoesQuery.data?.items])
+
   const columns = useMemo(
     () => [
       {
@@ -70,12 +70,26 @@ export function NotificacoesPage() {
       {
         title: 'Prioridade',
         key: 'severidade',
-        render: (record: NotificacaoItem) =>
-          record.requiresAction ? (
-            <Badge status="warning" text="Acao requerida" />
+        render: (record: NotificacaoItem) => {
+          const viewerAction = getMovimentacaoViewerActionInfo(
+            {
+              status: record.status,
+              secretariaOrigemId: record.secretariaOrigem.id,
+              secretariaOrigemSigla: record.secretariaOrigem.sigla,
+              secretariaDestinoId: record.secretariaDestino.id,
+              secretariaDestinoSigla: record.secretariaDestino.sigla,
+            },
+            session.user,
+          )
+
+          return viewerAction.canAct ? (
+            <Badge status="warning" text="Sua acao" />
+          ) : record.requiresAction ? (
+            <Badge status="processing" text="Acao requerida" />
           ) : (
-            <Badge status="processing" text="Acompanhamento" />
-          ),
+            <Badge status="default" text="Acompanhamento" />
+          )
+        },
       },
       {
         title: 'Notificacao',
@@ -91,7 +105,7 @@ export function NotificacoesPage() {
         title: 'Tombo',
         key: 'tombo',
         render: (record: NotificacaoItem) => (
-          <StatusBadge tone="info">{record.patrimonio.tombo}</StatusBadge>
+          <CopyToClipboard text={record.patrimonio.tombo} />
         ),
       },
       {
@@ -99,8 +113,42 @@ export function NotificacoesPage() {
         dataIndex: 'status',
         key: 'status',
         render: (value: StatusMovimentacao) => (
-          <StatusBadge color={getStatusColor(value)}>{value}</StatusBadge>
+          <StatusBadge color={getMovimentacaoStatusColor(value)}>
+            {formatMovimentacaoStatus(value)}
+          </StatusBadge>
         ),
+      },
+      {
+        title: 'Proximo passo',
+        key: 'nextStep',
+        render: (record: NotificacaoItem) => {
+          const nextStep = getMovimentacaoNextStepInfo({
+            status: record.status,
+            secretariaOrigemId: record.secretariaOrigem.id,
+            secretariaOrigemSigla: record.secretariaOrigem.sigla,
+            secretariaDestinoId: record.secretariaDestino.id,
+            secretariaDestinoSigla: record.secretariaDestino.sigla,
+          })
+          const viewerAction = getMovimentacaoViewerActionInfo(
+            {
+              status: record.status,
+              secretariaOrigemId: record.secretariaOrigem.id,
+              secretariaOrigemSigla: record.secretariaOrigem.sigla,
+              secretariaDestinoId: record.secretariaDestino.id,
+              secretariaDestinoSigla: record.secretariaDestino.sigla,
+            },
+            session.user,
+          )
+
+          return (
+            <Space direction="vertical" size={2}>
+              <StatusBadge tone={viewerAction.canAct ? viewerAction.tone : nextStep.tone}>
+                {viewerAction.canAct ? 'Sua acao' : nextStep.actorLabel}
+              </StatusBadge>
+              <span>{viewerAction.canAct ? viewerAction.title : nextStep.title}</span>
+            </Space>
+          )
+        },
       },
       {
         title: 'Acoes',
@@ -110,7 +158,7 @@ export function NotificacoesPage() {
         ),
       },
     ],
-    [navigate],
+    [navigate, session.user],
   )
 
   if (!canAccess) {
@@ -122,7 +170,7 @@ export function NotificacoesPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Notificacoes operacionais"
-          description="Primeiro recorte de notificacoes internas da Fase 3, derivado das movimentacoes abertas e do escopo do usuario logado."
+          description="Painel de notificacoes internas derivado das movimentacoes abertas e do escopo do usuario logado."
         />
 
         {notificacoesQuery.isError ? (
@@ -132,6 +180,22 @@ export function NotificacoesPage() {
             message="Nao foi possivel carregar as notificacoes."
           />
         ) : null}
+
+        {(notificacoesQuery.data?.summary.actionRequired ?? 0) > 0 ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="Ha movimentacoes aguardando uma acao operacional."
+            description="Os itens marcados como 'Sua acao' estao prontos para voce confirmar ou validar agora."
+          />
+        ) : (
+          <Alert
+            showIcon
+            type="info"
+            message="Painel em dia"
+            description="Nao ha acao operacional pendente para o seu perfil neste momento."
+          />
+        )}
 
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} xl={4}>
@@ -187,8 +251,25 @@ export function NotificacoesPage() {
           <Table
             rowKey="id"
             loading={notificacoesQuery.isLoading}
-            dataSource={notificacoesQuery.data?.items ?? []}
+            dataSource={orderedItems}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhuma notificacao encontrada para o seu escopo atual.',
+            })}
+            rowClassName={(record: NotificacaoItem) =>
+              getMovimentacaoViewerActionInfo(
+                {
+                  status: record.status,
+                  secretariaOrigemId: record.secretariaOrigem.id,
+                  secretariaOrigemSigla: record.secretariaOrigem.sigla,
+                  secretariaDestinoId: record.secretariaDestino.id,
+                  secretariaDestinoSigla: record.secretariaDestino.sigla,
+                },
+                session.user,
+              ).canAct
+                ? 'table-row--action-required'
+                : ''
+            }
             pagination={false}
           />
         </Card>

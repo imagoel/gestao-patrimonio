@@ -15,12 +15,14 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { inventariosService } from '../../services/inventarios.service'
 import { Perfil, StatusInventario, StatusInventarioItem } from '../../types/enums'
-import { formatDateTime } from '../../utils/formatters'
+import { formatDateTime, formatInventarioItemStatus } from '../../utils/formatters'
 import type { InventarioItemRegistro } from '../../types/inventarios.types'
 
 function getInventarioStatusColor(status: StatusInventario) {
@@ -133,7 +135,7 @@ export function InventarioDetalhePage() {
         title: 'Tombo',
         dataIndex: 'tomboSnapshot',
         key: 'tomboSnapshot',
-        render: (value: string) => <StatusBadge color="blue">{value}</StatusBadge>,
+        render: (value: string) => <CopyToClipboard text={value} />,
       },
       {
         title: 'Item',
@@ -168,7 +170,9 @@ export function InventarioDetalhePage() {
         dataIndex: 'status',
         key: 'status',
         render: (value: StatusInventarioItem) => (
-          <StatusBadge color={getInventarioItemStatusColor(value)}>{value}</StatusBadge>
+          <StatusBadge color={getInventarioItemStatusColor(value)}>
+            {formatInventarioItemStatus(value)}
+          </StatusBadge>
         ),
       },
       {
@@ -273,8 +277,43 @@ export function InventarioDetalhePage() {
           />
         ) : null}
 
+        {itensQuery.isError ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="Os dados principais do inventario foram carregados, mas a lista de itens nao pode ser consultada agora."
+          />
+        ) : null}
+
         {inventarioQuery.data ? (
           <>
+            <Alert
+              showIcon
+              type={
+                inventarioQuery.data.status === StatusInventario.CONCLUIDO
+                  ? 'success'
+                  : inventarioQuery.data.resumo.pendentes > 0
+                    ? 'info'
+                    : 'warning'
+              }
+              message={
+                inventarioQuery.data.status === StatusInventario.CONCLUIDO
+                  ? 'Inventario concluido.'
+                  : inventarioQuery.data.resumo.pendentes > 0
+                    ? 'Contagem em andamento.'
+                    : 'Inventario pronto para conclusao.'
+              }
+              description={
+                inventarioQuery.data.status === StatusInventario.CONCLUIDO
+                  ? 'Todos os registros deste ciclo ja foram encerrados e podem ser consultados livremente.'
+                  : inventarioQuery.data.resumo.pendentes > 0
+                    ? `Ainda faltam ${inventarioQuery.data.resumo.pendentes} item(ns) para finalizar a contagem deste ciclo.`
+                    : canManage
+                      ? 'Todos os itens foram analisados. A equipe de patrimonio ja pode concluir este inventario.'
+                      : 'Todos os itens foram analisados. Aguarde a conclusao formal do inventario.'
+              }
+            />
+
             <Space wrap>
               <Card>
                 <Statistic
@@ -303,6 +342,7 @@ export function InventarioDetalhePage() {
             </Space>
 
             <Card
+              title="Dados do ciclo"
               extra={
                 canManage ? (
                   <Button
@@ -320,8 +360,8 @@ export function InventarioDetalhePage() {
                   </Button>
                 ) : null
               }
-            >
-              <Descriptions title="Resumo do inventario" column={1} bordered>
+              >
+                <Descriptions column={1} bordered>
                 <Descriptions.Item label="Secretaria">
                   {inventarioQuery.data.secretaria.sigla} -{' '}
                   {inventarioQuery.data.secretaria.nomeCompleto}
@@ -390,6 +430,9 @@ export function InventarioDetalhePage() {
             loading={itensQuery.isLoading}
             dataSource={itensQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhum item encontrado para os filtros informados neste inventario.',
+            })}
             pagination={{
               current: itensQuery.data?.page ?? page,
               pageSize: itensQuery.data?.limit ?? 10,

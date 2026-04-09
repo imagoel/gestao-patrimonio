@@ -14,6 +14,7 @@ import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { usuariosService } from '../../services/usuarios.service'
 import { Perfil } from '../../types/enums'
@@ -25,6 +26,7 @@ export function UsuariosListPage() {
   const { message } = AntdApp.useApp()
   const { hasPerfil } = usePermissao()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [perfil, setPerfil] = useState<Perfil | undefined>(undefined)
   const [ativo, setAtivo] = useState<boolean | undefined>(undefined)
@@ -37,11 +39,11 @@ export function UsuariosListPage() {
   })
 
   const usuariosQuery = useQuery({
-    queryKey: ['usuarios-list', page, deferredSearch, perfil, ativo, secretariaId],
+    queryKey: ['usuarios-list', page, pageSize, deferredSearch, perfil, ativo, secretariaId],
     queryFn: () =>
       usuariosService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         perfil,
         ativo,
@@ -218,14 +220,22 @@ export function UsuariosListPage() {
 
           <Table
             rowKey="id"
-            loading={usuariosQuery.isLoading}
+            loading={{ spinning: usuariosQuery.isLoading, delay: 300 }}
             dataSource={usuariosQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({ description: 'Nenhum usuario encontrado.' })}
             pagination={{
               current: usuariosQuery.data?.page ?? page,
-              pageSize: usuariosQuery.data?.limit ?? 10,
+              pageSize,
               total: usuariosQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

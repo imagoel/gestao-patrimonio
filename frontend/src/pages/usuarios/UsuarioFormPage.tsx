@@ -87,7 +87,7 @@ export function UsuarioFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title={isEditing ? 'Editar usuario' : 'Cadastrar usuario'}
-          description="O modulo de usuarios fica restrito ao perfil administrador na fase atual."
+          description="O modulo de usuarios fica restrito ao perfil administrador."
         />
 
         <Card loading={usuarioQuery.isLoading || optionsQuery.isLoading}>

@@ -3,6 +3,7 @@ import { Drawer, Grid, Layout } from 'antd'
 import type { PropsWithChildren } from 'react'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import floatingBrandLogo from '../../assets/brand/minha-logo.png'
 import { useAuth } from '../../hooks/useAuth'
 import { notificacoesService } from '../../services/notificacoes.service'
 import { Header } from './Header'
@@ -16,7 +17,7 @@ interface AppLayoutProps extends PropsWithChildren {
 
 export function AppLayout({
   children,
-  label = 'Passo 1 - Estrutura base e containers',
+  label = 'Sistema patrimonial',
 }: AppLayoutProps) {
   const navigate = useNavigate()
   const { isAuthenticated, logout, session } = useAuth()
@@ -62,6 +63,12 @@ export function AppLayout({
 
         <Content className="app-shell__content">{children}</Content>
       </Layout>
+
+      {isAuthenticated ? (
+        <div className="app-shell__floating-brand" aria-hidden="true">
+          <img src={floatingBrandLogo} alt="" />
+        </div>
+      ) : null}
 
       {isAuthenticated && !isDesktop ? (
         <Drawer

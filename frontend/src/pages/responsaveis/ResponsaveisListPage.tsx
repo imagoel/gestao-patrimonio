@@ -14,6 +14,7 @@ import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { responsaveisService } from '../../services/responsaveis.service'
 import { secretariasService } from '../../services/secretarias.service'
@@ -27,6 +28,7 @@ export function ResponsaveisListPage() {
   const { message } = AntdApp.useApp()
   const { hasPerfil } = usePermissao()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [secretariaId, setSecretariaId] = useState<string | undefined>(undefined)
   const [ativo, setAtivo] = useState<boolean | undefined>(undefined)
@@ -38,11 +40,11 @@ export function ResponsaveisListPage() {
   })
 
   const responsaveisQuery = useQuery({
-    queryKey: ['responsaveis-list', page, deferredSearch, secretariaId, ativo],
+    queryKey: ['responsaveis-list', page, pageSize, deferredSearch, secretariaId, ativo],
     queryFn: () =>
       responsaveisService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         secretariaId,
         ativo,
@@ -213,14 +215,22 @@ export function ResponsaveisListPage() {
 
           <Table
             rowKey="id"
-            loading={responsaveisQuery.isLoading}
+            loading={{ spinning: responsaveisQuery.isLoading, delay: 300 }}
             dataSource={responsaveisQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({ description: 'Nenhum responsavel encontrado.' })}
             pagination={{
               current: responsaveisQuery.data?.page ?? page,
-              pageSize: responsaveisQuery.data?.limit ?? 10,
+              pageSize,
               total: responsaveisQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

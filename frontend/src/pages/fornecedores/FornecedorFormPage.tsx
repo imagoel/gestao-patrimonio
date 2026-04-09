@@ -76,7 +76,7 @@ export function FornecedorFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title={isEditing ? 'Editar fornecedor' : 'Cadastrar fornecedor'}
-          description="Este cadastro permanece restrito ao perfil administrador na fase atual."
+          description="Este cadastro permanece restrito ao perfil administrador."
         />
 
         <Card loading={fornecedorQuery.isLoading}>

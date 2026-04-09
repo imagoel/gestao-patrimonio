@@ -12,8 +12,11 @@ import { startTransition, useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { ActiveFiltersSummary } from '../../components/shared/ActiveFiltersSummary'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { patrimonioService } from '../../services/patrimonio.service'
 import {
@@ -26,6 +29,8 @@ import type { PatrimonioItem } from '../../types/patrimonio.types'
 import {
   formatCurrency,
   formatDateTime,
+  formatItemStatus,
+  formatTipoEntrada,
 } from '../../utils/formatters'
 import { normalizeTomboInput } from '../../utils/validators'
 
@@ -53,6 +58,7 @@ export function PatrimonioListPage() {
   const { hasPerfil } = usePermissao()
   const canManage = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [tombo, setTombo] = useState('')
   const [status, setStatus] = useState<StatusItem | undefined>(undefined)
@@ -81,6 +87,7 @@ export function PatrimonioListPage() {
     queryKey: [
       'patrimonios-list',
       page,
+      pageSize,
       deferredSearch,
       deferredTombo,
       status,
@@ -93,7 +100,7 @@ export function PatrimonioListPage() {
     queryFn: () =>
       patrimonioService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         tombo: deferredTombo || undefined,
         status,
@@ -116,13 +123,108 @@ export function PatrimonioListPage() {
     },
   })
 
+  const clearFilters = () => {
+    setSearch('')
+    setTombo('')
+    setStatus(undefined)
+    setEstadoConservacao(undefined)
+    setTipoEntrada(undefined)
+    setSecretariaAtualId(undefined)
+    setResponsavelAtualId(undefined)
+    setFornecedorId(undefined)
+    setPage(1)
+  }
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string; value: string }[] = []
+
+    if (search.trim()) {
+      filters.push({ key: 'search', label: 'Busca', value: search.trim() })
+    }
+
+    if (tombo) {
+      filters.push({ key: 'tombo', label: 'Tombo', value: tombo })
+    }
+
+    if (status) {
+      filters.push({ key: 'status', label: 'Status', value: formatItemStatus(status) })
+    }
+
+    if (estadoConservacao) {
+      filters.push({
+        key: 'estadoConservacao',
+        label: 'Estado',
+        value: estadoConservacao,
+      })
+    }
+
+    if (tipoEntrada) {
+      filters.push({
+        key: 'tipoEntrada',
+        label: 'Entrada',
+        value: formatTipoEntrada(tipoEntrada),
+      })
+    }
+
+    if (secretariaAtualId) {
+      const secretaria = patrimonioOptionsQuery.data?.secretarias.find(
+        (item) => item.id === secretariaAtualId,
+      )
+
+      filters.push({
+        key: 'secretaria',
+        label: 'Secretaria',
+        value: secretaria ? secretaria.sigla : secretariaAtualId,
+      })
+    }
+
+    if (responsavelAtualId) {
+      const responsavel = patrimonioOptionsQuery.data?.responsaveis.find(
+        (item) => item.id === responsavelAtualId,
+      )
+
+      filters.push({
+        key: 'responsavel',
+        label: 'Responsavel',
+        value: responsavel ? responsavel.nome : responsavelAtualId,
+      })
+    }
+
+    if (fornecedorId) {
+      const fornecedor = patrimonioOptionsQuery.data?.fornecedores.find(
+        (item) => item.id === fornecedorId,
+      )
+
+      filters.push({
+        key: 'fornecedor',
+        label: 'Fornecedor',
+        value: fornecedor ? fornecedor.nome : fornecedorId,
+      })
+    }
+
+    return filters
+  }, [
+    estadoConservacao,
+    fornecedorId,
+    patrimonioOptionsQuery.data?.fornecedores,
+    patrimonioOptionsQuery.data?.responsaveis,
+    patrimonioOptionsQuery.data?.secretarias,
+    responsavelAtualId,
+    search,
+    secretariaAtualId,
+    status,
+    tipoEntrada,
+    tombo,
+  ])
+
   const columns = useMemo(() => {
     const baseColumns = [
       {
         title: 'Tombo',
         dataIndex: 'tombo',
         key: 'tombo',
-        render: (value: string) => <StatusBadge tone="info">{value}</StatusBadge>,
+        render: (value: string) => <CopyToClipboard text={value} />,
+        sorter: (a: PatrimonioItem, b: PatrimonioItem) => a.tombo.localeCompare(b.tombo),
       },
       {
         title: 'Item',
@@ -163,12 +265,16 @@ export function PatrimonioListPage() {
         dataIndex: 'valorOriginal',
         key: 'valorOriginal',
         render: (value: string) => formatCurrency(value),
+        sorter: (a: PatrimonioItem, b: PatrimonioItem) =>
+          Number(a.valorOriginal) - Number(b.valorOriginal),
       },
       {
         title: 'Atualizado em',
         dataIndex: 'updatedAt',
         key: 'updatedAt',
         render: (value: string) => formatDateTime(value),
+        sorter: (a: PatrimonioItem, b: PatrimonioItem) =>
+          new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime(),
       },
     ]
 
@@ -233,7 +339,7 @@ export function PatrimonioListPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Patrimonio"
-          description="Cadastro patrimonial inicial com listagem e filtros basicos da Fase 1."
+          description="Consulte os bens cadastrados com filtros por tombo, status, secretaria, responsavel e fornecedor."
           actions={
             canManage ? (
               <Button
@@ -376,32 +482,48 @@ export function PatrimonioListPage() {
               )}
             />
             <Button
-              onClick={() => {
-                setSearch('')
-                setTombo('')
-                setStatus(undefined)
-                setEstadoConservacao(undefined)
-                setTipoEntrada(undefined)
-                setSecretariaAtualId(undefined)
-                setResponsavelAtualId(undefined)
-                setFornecedorId(undefined)
-                setPage(1)
-              }}
+              onClick={clearFilters}
             >
               Limpar filtros
             </Button>
           </Space>
 
+          <ActiveFiltersSummary
+            filters={activeFilters}
+            onClear={clearFilters}
+            total={patrimonioQuery.data?.total ?? 0}
+          />
+
           <Table
             rowKey="id"
-            loading={patrimonioQuery.isLoading}
+            loading={{
+              spinning: patrimonioQuery.isLoading,
+              delay: 300,
+            }}
             dataSource={patrimonioQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhum patrimonio encontrado com os filtros selecionados.',
+              onCreateClick: canManage ? () => navigate('/patrimonios/novo') : undefined,
+              createLabel: 'Novo patrimonio',
+            })}
+            rowClassName={(record: PatrimonioItem) =>
+              record.status === StatusItem.EM_MOVIMENTACAO
+                ? 'patrimonio-row--em-movimentacao'
+                : ''
+            }
             pagination={{
               current: patrimonioQuery.data?.page ?? page,
-              pageSize: patrimonioQuery.data?.limit ?? 10,
+              pageSize,
               total: patrimonioQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

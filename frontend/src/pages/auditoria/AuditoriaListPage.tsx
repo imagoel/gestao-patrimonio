@@ -4,7 +4,9 @@ import { useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { ActiveFiltersSummary } from '../../components/shared/ActiveFiltersSummary'
 import { StatusBadge } from '../../components/shared/StatusBadge'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { auditoriaService } from '../../services/auditoria.service'
 import { Perfil } from '../../types/enums'
@@ -65,6 +67,7 @@ export function AuditoriaListPage() {
   const { hasPerfil } = usePermissao()
   const canView = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [entidade, setEntidade] = useState<string | undefined>(undefined)
   const [acao, setAcao] = useState<string | undefined>(undefined)
@@ -78,11 +81,11 @@ export function AuditoriaListPage() {
   })
 
   const auditoriasQuery = useQuery({
-    queryKey: ['auditorias-list', page, deferredSearch, entidade, acao, usuarioId],
+    queryKey: ['auditorias-list', page, pageSize, deferredSearch, entidade, acao, usuarioId],
     queryFn: () =>
       auditoriaService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         entidade,
         acao,
@@ -90,6 +93,42 @@ export function AuditoriaListPage() {
       }),
     enabled: canView,
   })
+
+  const clearFilters = () => {
+    setSearch('')
+    setEntidade(undefined)
+    setAcao(undefined)
+    setUsuarioId(undefined)
+    setPage(1)
+  }
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string; value: string }[] = []
+
+    if (search.trim()) {
+      filters.push({ key: 'search', label: 'Busca', value: search.trim() })
+    }
+
+    if (entidade) {
+      filters.push({ key: 'entidade', label: 'Entidade', value: entidade })
+    }
+
+    if (acao) {
+      filters.push({ key: 'acao', label: 'Acao', value: acao })
+    }
+
+    if (usuarioId) {
+      const usuario = optionsQuery.data?.usuarios.find((item) => item.id === usuarioId)
+
+      filters.push({
+        key: 'usuario',
+        label: 'Usuario',
+        value: usuario ? usuario.nome : usuarioId,
+      })
+    }
+
+    return filters
+  }, [acao, entidade, optionsQuery.data?.usuarios, search, usuarioId])
 
   const columns = useMemo(
     () => [
@@ -212,28 +251,41 @@ export function AuditoriaListPage() {
               }))}
             />
             <Button
-              onClick={() => {
-                setSearch('')
-                setEntidade(undefined)
-                setAcao(undefined)
-                setUsuarioId(undefined)
-                setPage(1)
-              }}
+              onClick={clearFilters}
             >
               Limpar filtros
             </Button>
           </Space>
 
+          <ActiveFiltersSummary
+            filters={activeFilters}
+            onClear={clearFilters}
+            total={auditoriasQuery.data?.total ?? 0}
+          />
+
           <Table
             rowKey="id"
-            loading={auditoriasQuery.isLoading}
+            loading={{
+              spinning: auditoriasQuery.isLoading,
+              delay: 300,
+            }}
             dataSource={auditoriasQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhum registro de auditoria encontrado.',
+            })}
             pagination={{
               current: auditoriasQuery.data?.page ?? page,
-              pageSize: auditoriasQuery.data?.limit ?? 10,
+              pageSize,
               total: auditoriasQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

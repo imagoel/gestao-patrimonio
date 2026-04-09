@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
@@ -17,6 +18,7 @@ import { usePermissao } from '../../hooks/usePermissao'
 import { baixaService } from '../../services/baixa.service'
 import { MotivoBaixa, Perfil } from '../../types/enums'
 import type { BaixaFormValues } from '../../types/baixa.types'
+import { formatMotivoBaixa } from '../../utils/formatters'
 
 export function BaixaFormPage() {
   const [form] = Form.useForm<BaixaFormValues>()
@@ -63,7 +65,14 @@ export function BaixaFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Registrar baixa patrimonial"
-          description="A baixa exige motivo e retira o item de circulacao de forma definitiva nesta fase."
+          description="A baixa exige motivo e retira o item de circulacao de forma definitiva."
+        />
+
+        <Alert
+          showIcon
+          type="warning"
+          message="Esta operacao retira o item de circulacao."
+          description="Ao salvar, a baixa sera registrada com historico e auditoria. O item deixa de circular e nao volta sem regra administrativa futura."
         />
 
         <Card loading={optionsQuery.isLoading}>
@@ -124,12 +133,13 @@ export function BaixaFormPage() {
               label="Motivo da baixa"
               name="motivo"
               rules={[{ required: true, message: 'Selecione o motivo da baixa.' }]}
+              extra="Escolha o motivo que melhor representa a retirada definitiva do bem."
             >
               <Select
                 size="large"
                 options={(optionsQuery.data?.motivos ?? Object.values(MotivoBaixa)).map(
                   (motivo) => ({
-                    label: motivo,
+                    label: formatMotivoBaixa(motivo),
                     value: motivo,
                   }),
                 )}
@@ -139,6 +149,16 @@ export function BaixaFormPage() {
             <Form.Item label="Observacoes" name="observacoes">
               <Input.TextArea rows={4} />
             </Form.Item>
+
+            {selectedPatrimonio ? (
+              <Alert
+                showIcon
+                type="info"
+                style={{ marginBottom: 24 }}
+                message={`Revisao da baixa do tombo ${selectedPatrimonio.tombo}`}
+                description="Confira se este e realmente o bem correto antes de registrar a baixa patrimonial."
+              />
+            ) : null}
 
             <Space>
               <Button type="primary" htmlType="submit" loading={mutation.isPending}>

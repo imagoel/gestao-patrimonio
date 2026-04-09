@@ -81,7 +81,7 @@ export function ResponsavelFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title={isEditing ? 'Editar responsavel' : 'Cadastrar responsavel'}
-          description="Este cadastro permanece restrito ao perfil administrador na fase atual."
+          description="Este cadastro permanece restrito ao perfil administrador."
         />
 
         <Card loading={responsavelQuery.isLoading || secretariasQuery.isLoading}>

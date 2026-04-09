@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
@@ -55,6 +56,14 @@ export function MovimentacaoFormPage() {
     Boolean(watchedSecretariaDestinoId) &&
     watchedSecretariaDestinoId !== selectedPatrimonio?.secretariaAtualId
 
+  const selectedSecretariaDestino = useMemo(
+    () =>
+      (optionsQuery.data?.secretarias ?? []).find(
+        (secretaria) => secretaria.id === watchedSecretariaDestinoId,
+      ) ?? null,
+    [optionsQuery.data?.secretarias, watchedSecretariaDestinoId],
+  )
+
   useEffect(() => {
     const currentResponsavelDestinoId = form.getFieldValue('responsavelDestinoId')
 
@@ -99,6 +108,13 @@ export function MovimentacaoFormPage() {
         <PageHeader
           title="Solicitar movimentacao"
           description="A origem e lida automaticamente do patrimonio atual. Nesta etapa, a movimentacao segue para entrega, recebimento e validacao final."
+        />
+
+        <Alert
+          showIcon
+          type="info"
+          message="Esta solicitacao abre um fluxo com tres etapas."
+          description="Depois de salvar, a origem confirma a entrega, o destino confirma o recebimento e a equipe de patrimonio faz a validacao final."
         />
 
         <Card loading={optionsQuery.isLoading}>
@@ -159,15 +175,15 @@ export function MovimentacaoFormPage() {
               rules={[
                 { required: true, message: 'Selecione a secretaria de destino.' },
               ]}
-            >
-              <Select
-                size="large"
-                options={(optionsQuery.data?.secretarias ?? []).map((secretaria) => ({
-                  label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
-                  value: secretaria.id,
-                }))}
-              />
-            </Form.Item>
+              >
+                <Select
+                  size="large"
+                  options={(optionsQuery.data?.secretarias ?? []).map((secretaria) => ({
+                    label: `${secretaria.sigla} - ${secretaria.nomeCompleto}`,
+                    value: secretaria.id,
+                  }))}
+                />
+              </Form.Item>
 
             <Form.Item
               label="Responsavel de destino"
@@ -214,6 +230,22 @@ export function MovimentacaoFormPage() {
               <Input size="large" />
             </Form.Item>
 
+            {selectedPatrimonio && selectedSecretariaDestino ? (
+              <Card size="small" title="Resumo do destino" style={{ marginBottom: 24 }}>
+                <Descriptions column={1} bordered size="small">
+                  <Descriptions.Item label="Origem atual">
+                    {selectedPatrimonio.secretariaAtual.sigla} - {selectedPatrimonio.localizacaoAtual}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Destino proposto">
+                    {selectedSecretariaDestino.sigla}
+                  </Descriptions.Item>
+                  <Descriptions.Item label="Fluxo esperado">
+                    Entrega na origem {'->'} recebimento no destino {'->'} validacao final do patrimonio
+                  </Descriptions.Item>
+                </Descriptions>
+              </Card>
+            ) : null}
+
             <Form.Item
               label="Motivo"
               name="motivo"
@@ -228,6 +260,14 @@ export function MovimentacaoFormPage() {
             <Form.Item label="Observacoes" name="observacoes">
               <Input.TextArea rows={4} />
             </Form.Item>
+
+            <Alert
+              showIcon
+              style={{ marginBottom: 24 }}
+              type="warning"
+              message="Ao salvar, o item entra em fluxo de movimentacao."
+              description="O cadastro atual do patrimonio so sera alterado oficialmente depois da confirmacao de entrega, do recebimento e da validacao final."
+            />
 
             <Space>
               <Button type="primary" htmlType="submit" loading={mutation.isPending}>

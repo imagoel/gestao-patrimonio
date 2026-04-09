@@ -1,13 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
   Descriptions,
   Input,
   Space,
+  Steps,
+  Tag,
 } from 'antd'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
@@ -16,30 +19,42 @@ import { useAuth } from '../../hooks/useAuth'
 import { usePermissao } from '../../hooks/usePermissao'
 import { movimentacaoService } from '../../services/movimentacao.service'
 import { Perfil, StatusMovimentacao } from '../../types/enums'
-import { formatDateTime } from '../../utils/formatters'
+import { formatDateTime, formatMovimentacaoStatus } from '../../utils/formatters'
 import { Typography } from 'antd'
+import {
+  getMovimentacaoNextStepInfo,
+  getMovimentacaoStatusColor,
+  getMovimentacaoViewerActionInfo,
+} from '../../utils/movimentacao-ui'
 
 const { Text } = Typography
 
-function getStatusColor(status: StatusMovimentacao) {
-  switch (status) {
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA:
-      return 'orange'
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO:
-      return 'gold'
-    case StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO:
-      return 'blue'
-    case StatusMovimentacao.CONCLUIDA:
-      return 'green'
-    case StatusMovimentacao.REJEITADA:
-      return 'red'
-    case StatusMovimentacao.CANCELADA:
-      return 'default'
-    case StatusMovimentacao.APROVADA:
-      return 'cyan'
-    default:
-      return 'purple'
+function getStepStatus(
+  movimentacaoStatus: StatusMovimentacao,
+  stepIndex: number,
+): 'finish' | 'process' | 'wait' | 'error' {
+  const terminalSteps: Record<StatusMovimentacao, number> = {
+    [StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA]: 0,
+    [StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO]: 1,
+    [StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO]: 2,
+    [StatusMovimentacao.APROVADA]: 3,
+    [StatusMovimentacao.CONCLUIDA]: 3,
+    [StatusMovimentacao.REJEITADA]: -1,
+    [StatusMovimentacao.CANCELADA]: -1,
   }
+
+  if (
+    movimentacaoStatus === StatusMovimentacao.REJEITADA ||
+    movimentacaoStatus === StatusMovimentacao.CANCELADA
+  ) {
+    return stepIndex < 3 ? 'finish' : 'error'
+  }
+
+  const currentStep = terminalSteps[movimentacaoStatus] ?? 0
+
+  if (stepIndex < currentStep) return 'finish'
+  if (stepIndex === currentStep) return 'process'
+  return 'wait'
 }
 
 export function MovimentacaoDetalhePage() {
@@ -151,6 +166,114 @@ export function MovimentacaoDetalhePage() {
     movimentacao?.status === StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO &&
     isManager
 
+  const nextStepInfo = movimentacao
+    ? getMovimentacaoNextStepInfo({
+        status: movimentacao.status,
+        secretariaOrigemId: movimentacao.secretariaOrigemId,
+        secretariaOrigemSigla: movimentacao.secretariaOrigem.sigla,
+        secretariaDestinoId: movimentacao.secretariaDestinoId,
+        secretariaDestinoSigla: movimentacao.secretariaDestino.sigla,
+      })
+    : null
+  const viewerActionInfo = movimentacao
+    ? getMovimentacaoViewerActionInfo(
+        {
+          status: movimentacao.status,
+          secretariaOrigemId: movimentacao.secretariaOrigemId,
+          secretariaOrigemSigla: movimentacao.secretariaOrigem.sigla,
+          secretariaDestinoId: movimentacao.secretariaDestinoId,
+          secretariaDestinoSigla: movimentacao.secretariaDestino.sigla,
+        },
+        session.user,
+      )
+    : null
+
+  const timelineItems = useMemo(() => {
+    if (!movimentacao) return []
+
+    const isRejected =
+      movimentacao.status === StatusMovimentacao.REJEITADA
+    const isCancelled =
+      movimentacao.status === StatusMovimentacao.CANCELADA
+
+    return [
+      {
+        title: 'Solicitacao',
+        description: (
+          <Space direction="vertical" size={2}>
+            <Text>
+              {movimentacao.solicitante.nome} - {movimentacao.solicitante.perfil}
+            </Text>
+            <Text type="secondary">
+              {formatDateTime(movimentacao.solicitadoEm)}
+            </Text>
+            {movimentacao.motivo && (
+              <Text type="secondary">Motivo: {movimentacao.motivo}</Text>
+            )}
+          </Space>
+        ),
+      },
+      {
+        title: 'Confirmacao de entrega',
+        description: movimentacao.confirmadoEntregaPor ? (
+          <Space direction="vertical" size={2}>
+            <Text>
+              {movimentacao.confirmadoEntregaPor.nome} -{' '}
+              {movimentacao.confirmadoEntregaPor.perfil}
+            </Text>
+            <Text type="secondary">
+              {formatDateTime(movimentacao.confirmadoEntregaEm as string)}
+            </Text>
+          </Space>
+        ) : (
+          <Tag color="orange">Aguardando origem ({movimentacao.secretariaOrigem.sigla})</Tag>
+        ),
+      },
+      {
+        title: 'Confirmacao de recebimento',
+        description: movimentacao.confirmadoRecebimentoPor ? (
+          <Space direction="vertical" size={2}>
+            <Text>
+              {movimentacao.confirmadoRecebimentoPor.nome} -{' '}
+              {movimentacao.confirmadoRecebimentoPor.perfil}
+            </Text>
+            <Text type="secondary">
+              {formatDateTime(movimentacao.confirmadoRecebimentoEm as string)}
+            </Text>
+          </Space>
+        ) : (
+          <Tag color="gold">
+            Aguardando destino ({movimentacao.secretariaDestino.sigla})
+          </Tag>
+        ),
+      },
+      {
+        title: 'Validacao final do patrimonio',
+        description: movimentacao.validadoPor ? (
+          <Space direction="vertical" size={2}>
+            <Text>
+              {movimentacao.validadoPor.nome} - {movimentacao.validadoPor.perfil}
+            </Text>
+            <Text type="secondary">
+              {formatDateTime(movimentacao.validadoEm as string)}
+            </Text>
+          </Space>
+        ) : movimentacao.justificativaRejeicao ? (
+          <Space direction="vertical" size={2}>
+            <Tag color="red">Rejeitada</Tag>
+            <Text type="danger">
+              Justificativa: {movimentacao.justificativaRejeicao}
+            </Text>
+          </Space>
+        ) : isRejected || isCancelled ? (
+          <Tag color="default">{isRejected ? 'Rejeitada' : 'Cancelada'}</Tag>
+        ) : (
+          <Tag color="blue">Aguardando patrimonio</Tag>
+        ),
+      },
+    ]
+  }, [movimentacao])
+
   return (
     <AppLayout label="Detalhe da movimentacao">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -158,15 +281,72 @@ export function MovimentacaoDetalhePage() {
           title={`Movimentacao do tombo ${movimentacao?.patrimonio.tombo ?? '--'}`}
           description="O patrimonio so muda oficialmente de secretaria, localizacao e responsavel depois da validacao final."
           actions={
-            <StatusBadge color={movimentacao ? getStatusColor(movimentacao.status) : 'blue'}>
-              {movimentacao?.status ?? 'Carregando'}
+            <StatusBadge
+              color={movimentacao ? getMovimentacaoStatusColor(movimentacao.status) : 'blue'}
+            >
+              {movimentacao ? formatMovimentacaoStatus(movimentacao.status) : 'Carregando'}
             </StatusBadge>
           }
         />
 
+        {movimentacaoQuery.isError ? (
+          <Alert
+            showIcon
+            type="error"
+            message="Nao foi possivel carregar os dados desta movimentacao."
+          />
+        ) : null}
+
+        {movimentacao ? (
+          <Card>
+            <Alert
+              showIcon
+              type={viewerActionInfo?.canAct ? 'warning' : nextStepInfo?.tone === 'danger' ? 'error' : 'info'}
+              message={viewerActionInfo?.canAct ? viewerActionInfo.title : nextStepInfo?.title}
+              description={
+                viewerActionInfo?.canAct
+                  ? viewerActionInfo.description
+                  : `${nextStepInfo?.description} Responsavel atual: ${nextStepInfo?.actorLabel}.`
+              }
+            />
+          </Card>
+        ) : null}
+
+        <Card loading={movimentacaoQuery.isLoading}>
+          <Steps
+            direction="horizontal"
+            current={
+              movimentacao
+                ? (() => {
+                    const s = movimentacao.status
+                    if (s === StatusMovimentacao.REJEITADA || s === StatusMovimentacao.CANCELADA) return 3
+                    if (s === StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA) return 0
+                    if (s === StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO) return 1
+                    if (s === StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO) return 2
+                    return 3
+                  })()
+                : 0
+            }
+            status={
+              movimentacao?.status === StatusMovimentacao.REJEITADA ||
+              movimentacao?.status === StatusMovimentacao.CANCELADA
+                ? 'error'
+                : 'process'
+            }
+            items={timelineItems.map((item) => ({
+              title: item.title,
+              description: item.description,
+              status: movimentacao
+                ? getStepStatus(movimentacao.status, timelineItems.indexOf(item))
+                : 'wait',
+            }))}
+            style={{ marginBottom: 24 }}
+          />
+        </Card>
+
         <Card loading={movimentacaoQuery.isLoading}>
           {movimentacao ? (
-            <Descriptions title="Resumo da movimentacao" column={1} bordered>
+            <Descriptions title="Dados da solicitacao" column={1} bordered>
               <Descriptions.Item label="Item">
                 {movimentacao.patrimonio.item}
               </Descriptions.Item>

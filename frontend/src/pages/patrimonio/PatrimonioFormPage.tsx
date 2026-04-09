@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
@@ -50,6 +51,10 @@ export function PatrimonioFormPage() {
   const { message } = AntdApp.useApp()
   const { hasPerfil } = usePermissao()
   const watchedSecretariaId = Form.useWatch('secretariaAtualId', form)
+  const watchedResponsavelId = Form.useWatch('responsavelAtualId', form)
+  const watchedItem = Form.useWatch('item', form)
+  const watchedTombo = Form.useWatch('tombo', form)
+  const watchedStatus = Form.useWatch('status', form)
 
   const secretariasQuery = useQuery({
     queryKey: ['secretarias-options'],
@@ -159,6 +164,16 @@ export function PatrimonioFormPage() {
     [responsaveisOptions, watchedSecretariaId],
   )
 
+  const selectedSecretaria = useMemo(
+    () => secretariasOptions.find((item) => item.id === watchedSecretariaId) ?? null,
+    [secretariasOptions, watchedSecretariaId],
+  )
+
+  const selectedResponsavel = useMemo(
+    () => responsaveisOptions.find((item) => item.id === watchedResponsavelId) ?? null,
+    [responsaveisOptions, watchedResponsavelId],
+  )
+
   useEffect(() => {
     const currentResponsavelId = form.getFieldValue('responsavelAtualId')
 
@@ -206,7 +221,14 @@ export function PatrimonioFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title={isEditing ? 'Editar patrimonio' : 'Cadastrar patrimonio'}
-          description="Este modulo cobre o cadastro patrimonial inicial da Fase 1, sem antecipar movimentacao ou baixa."
+          description="Cadastre ou atualize bens com secretaria, responsavel e localizacao atual."
+        />
+
+        <Alert
+          showIcon
+          type="info"
+          message={isEditing ? 'Revise o cadastro antes de salvar.' : 'Preencha o cadastro base do bem.'}
+          description="O tombo continua unico, com 5 digitos, e a vinculacao atual de secretaria, responsavel e localizacao precisa estar completa para o item entrar no sistema."
         />
 
         <Card
@@ -268,6 +290,7 @@ export function PatrimonioFormPage() {
               label="Secretaria atual"
               name="secretariaAtualId"
               rules={[{ required: true, message: 'Selecione a secretaria.' }]}
+              extra="A secretaria atual define o escopo inicial do bem no sistema."
             >
               <Select
                 size="large"
@@ -282,6 +305,7 @@ export function PatrimonioFormPage() {
               label="Responsavel atual"
               name="responsavelAtualId"
               rules={[{ required: true, message: 'Selecione o responsavel.' }]}
+              extra="Somente responsaveis vinculados a secretaria escolhida aparecem nesta lista."
             >
               <Select
                 size="large"
@@ -374,6 +398,7 @@ export function PatrimonioFormPage() {
               rules={[
                 { required: true, message: 'Informe o valor original.' },
               ]}
+              extra="Use o valor de aquisicao ou de incorporacao do bem."
             >
               <InputNumber min={0} precision={2} style={{ width: '100%' }} />
             </Form.Item>
@@ -399,6 +424,38 @@ export function PatrimonioFormPage() {
             <Form.Item label="Observacoes" name="observacoes">
               <Input.TextArea rows={4} />
             </Form.Item>
+
+            <Card size="small" title="Revisao rapida" style={{ marginBottom: 24 }}>
+              <Space direction="vertical" size={4}>
+                <span>
+                  Item: {watchedItem?.trim() || 'Aguardando preenchimento'}
+                </span>
+                <span>
+                  Tombo: {watchedTombo || 'Aguardando preenchimento'}
+                </span>
+                <span>
+                  Secretaria: {selectedSecretaria
+                    ? `${selectedSecretaria.sigla} - ${selectedSecretaria.nomeCompleto}`
+                    : 'Aguardando selecao'}
+                </span>
+                <span>
+                  Responsavel: {selectedResponsavel
+                    ? `${selectedResponsavel.nome} - ${selectedResponsavel.setor}`
+                    : 'Aguardando selecao'}
+                </span>
+                <span>
+                  Status inicial: {watchedStatus ?? 'Aguardando selecao'}
+                </span>
+              </Space>
+            </Card>
+
+            <Alert
+              showIcon
+              type="info"
+              style={{ marginBottom: 24 }}
+              message={isEditing ? 'O cadastro sera atualizado.' : 'O cadastro sera criado e ficara disponivel para consulta.'}
+              description="Movimentacao, baixa e inventario continuam sendo realizados em modulos proprios para preservar auditoria e historico."
+            />
 
             <Space>
               <Button type="primary" htmlType="submit" loading={mutation.isPending}>

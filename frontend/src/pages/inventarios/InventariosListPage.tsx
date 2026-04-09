@@ -12,8 +12,10 @@ import { startTransition, useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { ActiveFiltersSummary } from '../../components/shared/ActiveFiltersSummary'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { inventariosService } from '../../services/inventarios.service'
 import { Perfil, StatusInventario } from '../../types/enums'
@@ -42,6 +44,7 @@ export function InventariosListPage() {
   )
   const canManage = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusInventario | undefined>(undefined)
   const [secretariaId, setSecretariaId] = useState<string | undefined>(undefined)
@@ -54,17 +57,48 @@ export function InventariosListPage() {
   })
 
   const inventariosQuery = useQuery({
-    queryKey: ['inventarios-list', page, deferredSearch, status, secretariaId],
+    queryKey: ['inventarios-list', page, pageSize, deferredSearch, status, secretariaId],
     queryFn: () =>
       inventariosService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         status,
         secretariaId,
       }),
     enabled: canAccess,
   })
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatus(undefined)
+    setSecretariaId(undefined)
+    setPage(1)
+  }
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string; value: string }[] = []
+
+    if (search.trim()) {
+      filters.push({ key: 'search', label: 'Busca', value: search.trim() })
+    }
+
+    if (status) {
+      filters.push({ key: 'status', label: 'Status', value: status })
+    }
+
+    if (secretariaId) {
+      const secretaria = optionsQuery.data?.secretarias.find((item) => item.id === secretariaId)
+
+      filters.push({
+        key: 'secretaria',
+        label: 'Secretaria',
+        value: secretaria ? secretaria.sigla : secretariaId,
+      })
+    }
+
+    return filters
+  }, [optionsQuery.data?.secretarias, search, secretariaId, status])
 
   const columns = useMemo(
     () => [
@@ -143,7 +177,7 @@ export function InventariosListPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Inventarios periodicos"
-          description="Recorte inicial do inventario por secretaria na Fase 3, com ciclo aberto, registro item a item e conclusao controlada."
+          description="Inventario por secretaria com ciclo aberto, registro item a item e conclusao controlada."
           actions={
             canManage ? (
               <Button
@@ -233,27 +267,41 @@ export function InventariosListPage() {
               }))}
             />
             <Button
-              onClick={() => {
-                setSearch('')
-                setStatus(undefined)
-                setSecretariaId(undefined)
-                setPage(1)
-              }}
+              onClick={clearFilters}
             >
               Limpar filtros
             </Button>
           </Space>
 
+          <ActiveFiltersSummary
+            filters={activeFilters}
+            onClear={clearFilters}
+            total={inventariosQuery.data?.total ?? 0}
+          />
+
           <Table
             rowKey="id"
-            loading={inventariosQuery.isLoading}
+            loading={{
+              spinning: inventariosQuery.isLoading,
+              delay: 300,
+            }}
             dataSource={inventariosQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhum inventario encontrado.',
+            })}
             pagination={{
               current: inventariosQuery.data?.page ?? page,
-              pageSize: inventariosQuery.data?.limit ?? 10,
+              pageSize,
               total: inventariosQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

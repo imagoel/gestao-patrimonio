@@ -19,6 +19,7 @@ import { useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { usePermissao } from '../../hooks/usePermissao'
 import { importacoesService } from '../../services/importacoes.service'
@@ -143,7 +144,8 @@ export function PatrimonioImportPage() {
       {
         title: 'Tombo',
         key: 'tombo',
-        render: (record: ImportacaoPatrimonioErro) => record.tombo ?? '--',
+        render: (record: ImportacaoPatrimonioErro) =>
+          record.tombo ? <CopyToClipboard text={record.tombo} /> : '--',
       },
       {
         title: 'Falha',
@@ -163,7 +165,7 @@ export function PatrimonioImportPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Importacao inicial de patrimonio por CSV"
-          description="Primeiro recorte da importacao por planilha na Fase 3. O arquivo cria patrimonios linha a linha usando as mesmas validacoes, historico e auditoria do cadastro manual."
+          description="Importe patrimonios por CSV usando as mesmas validacoes, historico e auditoria do cadastro manual."
           actions={
             <Space wrap>
               <Button

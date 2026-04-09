@@ -14,6 +14,7 @@ import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { secretariasService } from '../../services/secretarias.service'
 import { Perfil } from '../../types/enums'
@@ -26,16 +27,17 @@ export function SecretariasListPage() {
   const { message } = AntdApp.useApp()
   const { hasPerfil } = usePermissao()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [ativo, setAtivo] = useState<boolean | undefined>(undefined)
   const deferredSearch = useDeferredValue(search)
 
   const secretariasQuery = useQuery({
-    queryKey: ['secretarias-list', page, deferredSearch, ativo],
+    queryKey: ['secretarias-list', page, pageSize, deferredSearch, ativo],
     queryFn: () =>
       secretariasService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         ativo,
       }),
@@ -172,14 +174,22 @@ export function SecretariasListPage() {
 
           <Table
             rowKey="id"
-            loading={secretariasQuery.isLoading}
+            loading={{ spinning: secretariasQuery.isLoading, delay: 300 }}
             dataSource={secretariasQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({ description: 'Nenhuma secretaria encontrada.' })}
             pagination={{
               current: secretariasQuery.data?.page ?? page,
-              pageSize: secretariasQuery.data?.limit ?? 10,
+              pageSize,
               total: secretariasQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

@@ -72,7 +72,7 @@ export function SecretariaFormPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title={isEditing ? 'Editar secretaria' : 'Cadastrar secretaria'}
-          description="Este cadastro permanece restrito ao perfil administrador na fase atual."
+          description="Este cadastro permanece restrito ao perfil administrador."
         />
 
         <Card loading={secretariaQuery.isLoading}>

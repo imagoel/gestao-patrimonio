@@ -13,14 +13,21 @@ import {
 } from 'antd'
 import { useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
+import brandLogo from '../../assets/brand/minha-logo.png'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { useAuth } from '../../hooks/useAuth'
 import { usePermissao } from '../../hooks/usePermissao'
 import { dashboardService } from '../../services/dashboard.service'
 import { Perfil } from '../../types/enums'
-import { formatDateTime } from '../../utils/formatters'
+import {
+  formatDateTime,
+  formatItemStatus,
+  formatMovimentacaoStatus,
+  formatMotivoBaixa,
+} from '../../utils/formatters'
 import type {
   DashboardBaixaRecenteItem,
   DashboardMovimentacaoRecenteItem,
@@ -29,7 +36,7 @@ import type {
   DashboardPatrimonioStatusItem,
 } from '../../types/dashboard.types'
 
-const { Text } = Typography
+const { Paragraph, Text, Title } = Typography
 
 function getPatrimonioStatusColor(status: string) {
   switch (status) {
@@ -107,7 +114,7 @@ export function HomePage() {
         title: 'Tombo',
         key: 'tombo',
         render: (record: DashboardMovimentacaoRecenteItem) => (
-          <StatusBadge color="blue">{record.patrimonio.tombo}</StatusBadge>
+          <CopyToClipboard text={record.patrimonio.tombo} />
         ),
       },
       {
@@ -127,7 +134,7 @@ export function HomePage() {
         key: 'status',
         render: (value: string) => (
           <StatusBadge color={getMovimentacaoStatusColor(value)}>
-            {value}
+            {formatMovimentacaoStatus(value)}
           </StatusBadge>
         ),
       },
@@ -147,7 +154,7 @@ export function HomePage() {
         title: 'Tombo',
         key: 'tombo',
         render: (record: DashboardBaixaRecenteItem) => (
-          <StatusBadge color="red">{record.patrimonio.tombo}</StatusBadge>
+          <CopyToClipboard text={record.patrimonio.tombo} />
         ),
       },
       {
@@ -159,6 +166,7 @@ export function HomePage() {
         title: 'Motivo',
         dataIndex: 'motivo',
         key: 'motivo',
+        render: (value: string) => formatMotivoBaixa(value),
       },
       {
         title: 'Registrado por',
@@ -175,11 +183,11 @@ export function HomePage() {
   }
 
   return (
-    <AppLayout label="Dashboard gerencial">
+    <AppLayout label="Painel inicial">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
-          title="Dashboard gerencial inicial"
-          description="Primeira entrega da Fase 3 com indicadores consolidados de patrimonio, movimentacoes e baixas, reaproveitando o que ja foi implantado nas fases anteriores."
+          title="Painel inicial"
+          description="Painel consolidado com indicadores de patrimonio, movimentacoes e baixas do escopo atual."
           actions={
             <Space direction="vertical" size="small">
               <Space wrap>
@@ -215,6 +223,24 @@ export function HomePage() {
             showIcon
           />
         ) : null}
+
+        <Card className="home-brand-card">
+          <div className="home-brand-card__content">
+            <div className="home-brand-card__copy">
+              <Text type="secondary">Identidade institucional</Text>
+              <Title level={3} style={{ marginTop: 8, marginBottom: 8 }}>
+                Prefeitura Municipal de Amargosa
+              </Title>
+              <Paragraph style={{ marginBottom: 0 }}>
+                Ambiente interno para acompanhar o patrimonio, as movimentacoes,
+                as baixas e os indicadores do seu escopo de trabalho.
+              </Paragraph>
+            </div>
+            <div className="home-brand-card__logo">
+              <img src={brandLogo} alt="Logo institucional" />
+            </div>
+          </div>
+        </Card>
 
         <Row gutter={[16, 16]}>
           <Col xs={24} sm={12} xl={6}>
@@ -294,7 +320,7 @@ export function HomePage() {
                       key={item.status}
                       color={getPatrimonioStatusColor(item.status)}
                     >
-                      {item.status}: {item.total}
+                      {formatItemStatus(item.status)}: {item.total}
                     </StatusBadge>
                   ),
                 )}
@@ -313,7 +339,7 @@ export function HomePage() {
                       key={item.status}
                       color={getMovimentacaoStatusColor(item.status)}
                     >
-                      {item.status}: {item.total}
+                      {formatMovimentacaoStatus(item.status)}: {item.total}
                     </StatusBadge>
                   ),
                 )}
@@ -374,46 +400,63 @@ export function HomePage() {
           </Descriptions>
         </Card>
 
-        <Space wrap>
-          <Button onClick={() => void dashboardQuery.refetch()}>Atualizar painel</Button>
-          {hasPerfil(Perfil.ADMINISTRADOR) ? (
-            <Button onClick={() => navigate('/usuarios')}>Gerenciar usuarios</Button>
-          ) : null}
-          {hasPerfil(Perfil.ADMINISTRADOR) ? (
-            <Button onClick={() => navigate('/secretarias')}>
-              Gerenciar secretarias
+        <Card title="Acoes rapidas">
+          <Space wrap size={[12, 12]}>
+            <Button onClick={() => void dashboardQuery.refetch()}>
+              Atualizar painel
             </Button>
-          ) : null}
-          {hasPerfil(Perfil.ADMINISTRADOR) ? (
-            <Button onClick={() => navigate('/responsaveis')}>
-              Gerenciar responsaveis
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) && (
+              <Button type="primary" onClick={() => navigate('/patrimonios/novo')}>
+                Novo patrimonio
+              </Button>
+            )}
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO, Perfil.CHEFE_SETOR) && (
+              <Button type="primary" onClick={() => navigate('/movimentacoes/nova')}>
+                Nova movimentacao
+              </Button>
+            )}
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) && (
+              <Button onClick={() => navigate('/baixas/nova')}>
+                Nova baixa
+              </Button>
+            )}
+            <Button onClick={() => navigate('/patrimonios')}>
+              Consultar patrimonios
             </Button>
-          ) : null}
-          {hasPerfil(Perfil.ADMINISTRADOR) ? (
-            <Button onClick={() => navigate('/fornecedores')}>
-              Gerenciar fornecedores
+            <Button onClick={() => navigate('/movimentacoes')}>
+              Consultar movimentacoes
             </Button>
-          ) : null}
-          {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) ? (
-            <Button onClick={() => navigate('/importacoes/patrimonios')}>
-              Importar planilha
+            <Button onClick={() => navigate('/notificacoes')}>
+              Notificacoes
             </Button>
-          ) : null}
-          <Button onClick={() => navigate('/inventarios')}>Inventarios</Button>
-          <Button onClick={() => navigate('/notificacoes')}>Notificacoes</Button>
-          <Button onClick={() => navigate('/patrimonios')}>Patrimonios</Button>
-          <Button onClick={() => navigate('/movimentacoes')}>Movimentacoes</Button>
-          <Button onClick={() => navigate('/baixas')}>Baixas</Button>
-          {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) ? (
-            <Button onClick={() => navigate('/auditoria')}>Auditoria</Button>
-          ) : null}
-          {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) ? (
-            <Button onClick={() => navigate('/relatorios')}>Relatorios</Button>
-          ) : null}
-          <Button type="primary" onClick={handleLogout}>
-            Sair
-          </Button>
-        </Space>
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) && (
+              <Button onClick={() => navigate('/relatorios')}>
+                Emitir relatorio
+              </Button>
+            )}
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) && (
+              <Button onClick={() => navigate('/importacoes/patrimonios')}>
+                Importar planilha
+              </Button>
+            )}
+            {hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO) && (
+              <Button onClick={() => navigate('/auditoria')}>
+                Auditoria
+              </Button>
+            )}
+            {hasPerfil(Perfil.ADMINISTRADOR) && (
+              <Button onClick={() => navigate('/usuarios')}>
+                Gerenciar usuarios
+              </Button>
+            )}
+            <Button onClick={() => navigate('/inventarios')}>
+              Inventarios
+            </Button>
+            <Button danger onClick={handleLogout}>
+              Sair
+            </Button>
+          </Space>
+        </Card>
       </Space>
     </AppLayout>
   )

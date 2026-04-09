@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
+  Alert,
   App as AntdApp,
   Button,
   Card,
@@ -11,11 +12,19 @@ import { useMemo } from 'react'
 import { Navigate, useNavigate, useParams } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { patrimonioService } from '../../services/patrimonio.service'
 import { Perfil, StatusItem } from '../../types/enums'
-import { formatCurrency, formatDate, formatDateTime } from '../../utils/formatters'
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatItemStatus,
+  formatTipoEntrada,
+} from '../../utils/formatters'
 import type { PatrimonioHistoricoItem } from '../../types/patrimonio.types'
 
 function getStatusColor(status: StatusItem) {
@@ -147,16 +156,77 @@ export function PatrimonioDetalhePage() {
           description="Consulta consolidada do cadastro atual do bem e da sua trilha de historico no sistema."
           actions={
             <StatusBadge color={patrimonio ? getStatusColor(patrimonio.status) : 'blue'}>
-              {patrimonio?.status ?? 'Carregando'}
+              {patrimonio ? formatItemStatus(patrimonio.status) : 'Carregando'}
             </StatusBadge>
           }
         />
 
+        {patrimonioQuery.isError ? (
+          <Alert
+            showIcon
+            type="error"
+            message="Nao foi possivel carregar os dados principais do patrimonio."
+          />
+        ) : null}
+
+        {historicoQuery.isError ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="O cadastro do patrimonio foi carregado, mas o historico nao pode ser consultado agora."
+          />
+        ) : null}
+
+        {avaliacaoQuery.isError ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="Os dados de valor atual e depreciacao estao indisponiveis no momento."
+          />
+        ) : null}
+
+        {patrimonio ? (
+          <Space wrap size={[16, 16]}>
+            <Card size="small" title="Status atual">
+              <StatusBadge color={getStatusColor(patrimonio.status)}>
+                {formatItemStatus(patrimonio.status)}
+              </StatusBadge>
+            </Card>
+            <Card size="small" title="Secretaria atual">
+              {patrimonio.secretariaAtual.sigla} - {patrimonio.secretariaAtual.nomeCompleto}
+            </Card>
+            <Card size="small" title="Localizacao atual">
+              {patrimonio.localizacaoAtual}
+            </Card>
+            <Card size="small" title="Responsavel atual">
+              {patrimonio.responsavelAtual.nome}
+            </Card>
+          </Space>
+        ) : null}
+
+        {patrimonio?.status === StatusItem.EM_MOVIMENTACAO ? (
+          <Alert
+            showIcon
+            type="info"
+            message="Este item esta em movimentacao."
+            description="A secretaria, a localizacao e o responsavel so mudam oficialmente depois da validacao final da movimentacao."
+          />
+        ) : null}
+
+        {patrimonio?.status === StatusItem.BAIXADO ? (
+          <Alert
+            showIcon
+            type="warning"
+            message="Este item foi baixado."
+            description="Itens baixados permanecem consultaveis, mas nao devem voltar a circular sem regra administrativa especifica."
+          />
+        ) : null}
+
         <Card loading={patrimonioQuery.isLoading}>
           {patrimonio ? (
-            <Descriptions title="Resumo do patrimonio" column={1} bordered>
+            <Descriptions title="Dados cadastrais" column={1} bordered>
               <Descriptions.Item label="Tombo">
-                <StatusBadge color="blue">{patrimonio.tombo}</StatusBadge>
+                <CopyToClipboard text={patrimonio.tombo} />
               </Descriptions.Item>
               <Descriptions.Item label="Item">
                 {patrimonio.item}
@@ -176,7 +246,7 @@ export function PatrimonioDetalhePage() {
                 {patrimonio.estadoConservacao}
               </Descriptions.Item>
               <Descriptions.Item label="Tipo de entrada">
-                {patrimonio.tipoEntrada}
+                {formatTipoEntrada(patrimonio.tipoEntrada)}
               </Descriptions.Item>
               <Descriptions.Item label="Fornecedor">
                 {patrimonio.fornecedor
@@ -294,6 +364,9 @@ export function PatrimonioDetalhePage() {
             rowKey="id"
             dataSource={historicoQuery.data ?? []}
             columns={historicoColumns}
+            locale={createTableLocale({
+              description: 'Nenhum evento de historico foi registrado para este patrimonio.',
+            })}
             pagination={false}
           />
         </Card>

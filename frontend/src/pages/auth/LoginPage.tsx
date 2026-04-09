@@ -1,26 +1,19 @@
-import { useQuery } from '@tanstack/react-query'
 import {
-  Alert,
   App as AntdApp,
   Button,
   Card,
-  Divider,
   Form,
   Input,
   Space,
-  Spin,
-  Tag,
   Typography,
 } from 'antd'
 import { startTransition, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import logo from '../../assets/logo.svg'
+import brandLogo from '../../assets/brand/minha-logo.png'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
 import { authService } from '../../services/auth.service'
-import { healthService } from '../../services/health.service'
 import type { LoginPayload } from '../../types/auth.types'
-import { formatDateTimeWithSeconds } from '../../utils/formatters'
 import { emailRule } from '../../utils/validators'
 
 const { Paragraph, Text, Title } = Typography
@@ -30,12 +23,6 @@ export function LoginPage() {
   const { message } = AntdApp.useApp()
   const { isAuthenticated, login } = useAuth()
   const [isSubmitting, setIsSubmitting] = useState(false)
-
-  const healthQuery = useQuery({
-    queryKey: ['api-health'],
-    queryFn: healthService.check,
-    retry: false,
-  })
 
   if (isAuthenticated) {
     return <Navigate to="/app" replace />
@@ -65,49 +52,37 @@ export function LoginPage() {
   }
 
   return (
-    <AppLayout label="Autenticacao inicial">
+    <AppLayout label="Acesso ao sistema">
       <section className="page-center">
         <div className="login-panel">
           <div className="login-copy">
-            <span className="login-copy__kicker">Fase 1 - autenticacao</span>
+            <span className="login-copy__kicker">Prefeitura Municipal de Amargosa</span>
             <Title>
-              Login real com JWT para iniciar o sistema patrimonial.
+              Acesse o sistema de gestao patrimonial.
             </Title>
             <Paragraph>
-              Esta etapa abre a Fase 1 com autenticacao local por e-mail e
-              senha, emissao de token JWT, validacao de usuario ativo e sessao
-              persistida no front-end.
+              Use seu e-mail e senha para consultar informacoes e executar as
+              operacoes permitidas ao seu perfil.
             </Paragraph>
             <Paragraph>
-              O seed inicial ja disponibiliza um administrador para o primeiro
-              acesso local, sem necessidade de criar usuarios manualmente antes
-              dos proximos modulos.
+              Em caso de duvidas sobre acesso, procure a administracao do
+              sistema.
             </Paragraph>
-            <Space wrap size={[8, 8]}>
-              <Tag color="green">Passport Local</Tag>
-              <Tag color="blue">Passport JWT</Tag>
-              <Tag color="purple">Sessao persistida</Tag>
-              <Tag color="cyan">Auditoria de login</Tag>
-            </Space>
           </div>
 
           <Card className="login-card">
             <Space direction="vertical" size="large" style={{ width: '100%' }}>
-              <div className="login-card__logo">
-                <img src={logo} alt="" width={40} height={40} />
+              <div className="login-card__logo login-card__logo--brand">
+                <img src={brandLogo} alt="Logo institucional" />
               </div>
 
               <div>
-                <Text type="secondary">Primeiro acesso local</Text>
+                <Text type="secondary">Identificacao</Text>
                 <Title level={3} style={{ marginTop: 8, marginBottom: 8 }}>
-                  Entre com o usuario inicial
+                  Entrar
                 </Title>
                 <Paragraph type="secondary">
-                  Credenciais do seed:
-                  {' '}
-                  <strong>admin@patrimonio.local</strong>
-                  {' / '}
-                  <strong>Admin@123</strong>
+                  Informe suas credenciais para continuar.
                 </Paragraph>
               </div>
 
@@ -115,10 +90,6 @@ export function LoginPage() {
                 layout="vertical"
                 onFinish={(values) => {
                   void handleFinish(values)
-                }}
-                initialValues={{
-                  email: 'admin@patrimonio.local',
-                  senha: 'Admin@123',
                 }}
               >
                 <Form.Item
@@ -129,7 +100,7 @@ export function LoginPage() {
                     emailRule,
                   ]}
                 >
-                  <Input size="large" placeholder="admin@patrimonio.local" />
+                  <Input size="large" placeholder="Digite seu e-mail" />
                 </Form.Item>
 
                 <Form.Item
@@ -151,37 +122,8 @@ export function LoginPage() {
                 </Button>
               </Form>
 
-              <Divider style={{ margin: 0 }} />
-
-              {healthQuery.isLoading ? (
-                <Spin tip="Consultando GET /api/health..." />
-              ) : null}
-
-              {healthQuery.isSuccess ? (
-                <Alert
-                  showIcon
-                  type="success"
-                  message="Back-end acessivel pelo cliente Axios"
-                  description={`Resposta recebida em ${formatDateTimeWithSeconds(
-                    healthQuery.data.timestamp,
-                  )}. Servico: ${
-                    healthQuery.data.service
-                  }.`}
-                />
-              ) : null}
-
-              {healthQuery.isError ? (
-                <Alert
-                  showIcon
-                  type="error"
-                  message="Nao foi possivel consultar /api/health"
-                  description="Revise os servicos backend e nginx quando for subir os containers."
-                />
-              ) : null}
-
               <Text type="secondary">
-                Sessao atual:{' '}
-                {isAuthenticated ? 'autenticada' : 'aguardando login'}
+                Acesso restrito a usuarios autorizados.
               </Text>
             </Space>
           </Card>

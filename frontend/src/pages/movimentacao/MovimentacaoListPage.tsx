@@ -11,36 +11,25 @@ import { startTransition, useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
+import { ActiveFiltersSummary } from '../../components/shared/ActiveFiltersSummary'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
 import { StatusBadge } from '../../components/shared/StatusBadge'
+import { createTableLocale } from '../../components/shared/TableEmpty'
+import { useAuth } from '../../hooks/useAuth'
 import { usePermissao } from '../../hooks/usePermissao'
 import { movimentacaoService } from '../../services/movimentacao.service'
 import { Perfil, StatusMovimentacao } from '../../types/enums'
 import type { MovimentacaoItem } from '../../types/movimentacao.types'
-import { formatDateTime } from '../../utils/formatters'
-
-function getStatusColor(status: StatusMovimentacao) {
-  switch (status) {
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_ENTREGA:
-      return 'orange'
-    case StatusMovimentacao.AGUARDANDO_CONFIRMACAO_RECEBIMENTO:
-      return 'gold'
-    case StatusMovimentacao.AGUARDANDO_APROVACAO_PATRIMONIO:
-      return 'blue'
-    case StatusMovimentacao.CONCLUIDA:
-      return 'green'
-    case StatusMovimentacao.REJEITADA:
-      return 'red'
-    case StatusMovimentacao.CANCELADA:
-      return 'default'
-    case StatusMovimentacao.APROVADA:
-      return 'cyan'
-    default:
-      return 'purple'
-  }
-}
+import { formatDateTime, formatMovimentacaoStatus } from '../../utils/formatters'
+import {
+  getMovimentacaoNextStepInfo,
+  getMovimentacaoStatusColor,
+  getMovimentacaoViewerActionInfo,
+} from '../../utils/movimentacao-ui'
 
 export function MovimentacaoListPage() {
   const navigate = useNavigate()
+  const { session } = useAuth()
   const { hasPerfil } = usePermissao()
   const canCreate = hasPerfil(
     Perfil.ADMINISTRADOR,
@@ -48,6 +37,7 @@ export function MovimentacaoListPage() {
     Perfil.CHEFE_SETOR,
   )
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<StatusMovimentacao | undefined>(undefined)
   const [secretariaId, setSecretariaId] = useState<string | undefined>(undefined)
@@ -59,16 +49,55 @@ export function MovimentacaoListPage() {
   })
 
   const movimentacoesQuery = useQuery({
-    queryKey: ['movimentacoes-list', page, deferredSearch, status, secretariaId],
+    queryKey: ['movimentacoes-list', page, pageSize, deferredSearch, status, secretariaId],
     queryFn: () =>
       movimentacaoService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         status,
         secretariaId,
       }),
   })
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatus(undefined)
+    setSecretariaId(undefined)
+    setPage(1)
+  }
+
+  const activeFilters = useMemo(() => {
+    const filters: { key: string; label: string; value: string }[] = []
+
+    if (search.trim()) {
+      filters.push({
+        key: 'search',
+        label: 'Busca',
+        value: search.trim(),
+      })
+    }
+
+    if (status) {
+      filters.push({
+        key: 'status',
+        label: 'Status',
+        value: formatMovimentacaoStatus(status),
+      })
+    }
+
+    if (secretariaId) {
+      const secretaria = optionsQuery.data?.secretarias.find((item) => item.id === secretariaId)
+
+      filters.push({
+        key: 'secretaria',
+        label: 'Secretaria',
+        value: secretaria ? secretaria.sigla : secretariaId,
+      })
+    }
+
+    return filters
+  }, [optionsQuery.data?.secretarias, search, secretariaId, status])
 
   const columns = useMemo(
     () => [
@@ -76,7 +105,7 @@ export function MovimentacaoListPage() {
         title: 'Tombo',
         key: 'tombo',
         render: (record: MovimentacaoItem) => (
-          <StatusBadge tone="info">{record.patrimonio.tombo}</StatusBadge>
+          <CopyToClipboard text={record.patrimonio.tombo} />
         ),
       },
       {
@@ -101,8 +130,42 @@ export function MovimentacaoListPage() {
         dataIndex: 'status',
         key: 'status',
         render: (value: StatusMovimentacao) => (
-          <StatusBadge color={getStatusColor(value)}>{value}</StatusBadge>
+          <StatusBadge color={getMovimentacaoStatusColor(value)}>
+            {formatMovimentacaoStatus(value)}
+          </StatusBadge>
         ),
+      },
+      {
+        title: 'Proximo passo',
+        key: 'nextStep',
+        render: (record: MovimentacaoItem) => {
+          const nextStep = getMovimentacaoNextStepInfo({
+            status: record.status,
+            secretariaOrigemId: record.secretariaOrigemId,
+            secretariaOrigemSigla: record.secretariaOrigem.sigla,
+            secretariaDestinoId: record.secretariaDestinoId,
+            secretariaDestinoSigla: record.secretariaDestino.sigla,
+          })
+          const viewerAction = getMovimentacaoViewerActionInfo(
+            {
+              status: record.status,
+              secretariaOrigemId: record.secretariaOrigemId,
+              secretariaOrigemSigla: record.secretariaOrigem.sigla,
+              secretariaDestinoId: record.secretariaDestinoId,
+              secretariaDestinoSigla: record.secretariaDestino.sigla,
+            },
+            session.user,
+          )
+
+          return (
+            <Space direction="vertical" size={2}>
+              <StatusBadge tone={viewerAction.canAct ? viewerAction.tone : nextStep.tone}>
+                {viewerAction.canAct ? 'Sua acao' : nextStep.actorLabel}
+              </StatusBadge>
+              <span>{viewerAction.canAct ? viewerAction.title : nextStep.title}</span>
+            </Space>
+          )
+        },
       },
       {
         title: 'Solicitado em',
@@ -120,7 +183,7 @@ export function MovimentacaoListPage() {
         ),
       },
     ],
-    [navigate],
+    [navigate, session.user],
   )
 
   if (
@@ -139,7 +202,7 @@ export function MovimentacaoListPage() {
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <PageHeader
           title="Movimentacoes"
-          description="Fluxo inicial da Fase 2 com solicitacao, confirmacoes e validacao final do patrimonio."
+          description="Fluxo com solicitacao, confirmacoes e validacao final do patrimonio."
           actions={
             canCreate ? (
               <Button
@@ -200,27 +263,55 @@ export function MovimentacaoListPage() {
               }))}
             />
             <Button
-              onClick={() => {
-                setSearch('')
-                setStatus(undefined)
-                setSecretariaId(undefined)
-                setPage(1)
-              }}
+              onClick={clearFilters}
             >
               Limpar filtros
             </Button>
           </Space>
 
+          <ActiveFiltersSummary
+            filters={activeFilters}
+            onClear={clearFilters}
+            total={movimentacoesQuery.data?.total ?? 0}
+          />
+
           <Table
             rowKey="id"
-            loading={movimentacoesQuery.isLoading}
+            loading={{
+              spinning: movimentacoesQuery.isLoading,
+              delay: 300,
+            }}
             dataSource={movimentacoesQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhuma movimentacao encontrada.',
+            })}
+            rowClassName={(record: MovimentacaoItem) =>
+              getMovimentacaoViewerActionInfo(
+                {
+                  status: record.status,
+                  secretariaOrigemId: record.secretariaOrigemId,
+                  secretariaOrigemSigla: record.secretariaOrigem.sigla,
+                  secretariaDestinoId: record.secretariaDestinoId,
+                  secretariaDestinoSigla: record.secretariaDestino.sigla,
+                },
+                session.user,
+              ).canAct
+                ? 'table-row--action-required'
+                : ''
+            }
             pagination={{
               current: movimentacoesQuery.data?.page ?? page,
-              pageSize: movimentacoesQuery.data?.limit ?? 10,
+              pageSize,
               total: movimentacoesQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

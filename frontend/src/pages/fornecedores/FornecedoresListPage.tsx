@@ -14,6 +14,7 @@ import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
 import { StatusBadge } from '../../components/shared/StatusBadge'
 import { TableActions } from '../../components/shared/TableActions'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { fornecedoresService } from '../../services/fornecedores.service'
 import { Perfil } from '../../types/enums'
@@ -26,16 +27,17 @@ export function FornecedoresListPage() {
   const { message } = AntdApp.useApp()
   const { hasPerfil } = usePermissao()
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [ativo, setAtivo] = useState<boolean | undefined>(undefined)
   const deferredSearch = useDeferredValue(search)
 
   const fornecedoresQuery = useQuery({
-    queryKey: ['fornecedores-list', page, deferredSearch, ativo],
+    queryKey: ['fornecedores-list', page, pageSize, deferredSearch, ativo],
     queryFn: () =>
       fornecedoresService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         ativo,
       }),
@@ -184,14 +186,22 @@ export function FornecedoresListPage() {
 
           <Table
             rowKey="id"
-            loading={fornecedoresQuery.isLoading}
+            loading={{ spinning: fornecedoresQuery.isLoading, delay: 300 }}
             dataSource={fornecedoresQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({ description: 'Nenhum fornecedor encontrado.' })}
             pagination={{
               current: fornecedoresQuery.data?.page ?? page,
-              pageSize: fornecedoresQuery.data?.limit ?? 10,
+              pageSize,
               total: fornecedoresQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

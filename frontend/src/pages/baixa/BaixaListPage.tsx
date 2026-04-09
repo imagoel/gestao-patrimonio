@@ -11,18 +11,20 @@ import { startTransition, useDeferredValue, useMemo, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AppLayout } from '../../components/layout/AppLayout'
 import { PageHeader } from '../../components/layout/PageHeader'
-import { StatusBadge } from '../../components/shared/StatusBadge'
+import { CopyToClipboard } from '../../components/shared/CopyToClipboard'
+import { createTableLocale } from '../../components/shared/TableEmpty'
 import { usePermissao } from '../../hooks/usePermissao'
 import { baixaService } from '../../services/baixa.service'
 import { MotivoBaixa, Perfil } from '../../types/enums'
 import type { BaixaItem } from '../../types/baixa.types'
-import { formatDateTime } from '../../utils/formatters'
+import { formatDateTime, formatMotivoBaixa } from '../../utils/formatters'
 
 export function BaixaListPage() {
   const navigate = useNavigate()
   const { hasPerfil } = usePermissao()
   const canCreate = hasPerfil(Perfil.ADMINISTRADOR, Perfil.TECNICO_PATRIMONIO)
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [motivo, setMotivo] = useState<MotivoBaixa | undefined>(undefined)
   const [secretariaId, setSecretariaId] = useState<string | undefined>(undefined)
@@ -35,11 +37,11 @@ export function BaixaListPage() {
   })
 
   const baixasQuery = useQuery({
-    queryKey: ['baixas-list', page, deferredSearch, motivo, secretariaId],
+    queryKey: ['baixas-list', page, pageSize, deferredSearch, motivo, secretariaId],
     queryFn: () =>
       baixaService.list({
         page,
-        limit: 10,
+        limit: pageSize,
         search: deferredSearch || undefined,
         motivo,
         secretariaId,
@@ -52,7 +54,7 @@ export function BaixaListPage() {
         title: 'Tombo',
         key: 'tombo',
         render: (record: BaixaItem) => (
-          <StatusBadge tone="danger">{record.patrimonio.tombo}</StatusBadge>
+          <CopyToClipboard text={record.patrimonio.tombo} />
         ),
       },
       {
@@ -69,6 +71,7 @@ export function BaixaListPage() {
         title: 'Motivo',
         dataIndex: 'motivo',
         key: 'motivo',
+        render: (value: string) => formatMotivoBaixa(value),
       },
       {
         title: 'Baixado em',
@@ -140,7 +143,7 @@ export function BaixaListPage() {
                 setPage(1)
               }}
               options={Object.values(MotivoBaixa).map((item) => ({
-                label: item,
+                label: formatMotivoBaixa(item),
                 value: item,
               }))}
             />
@@ -175,14 +178,27 @@ export function BaixaListPage() {
 
           <Table
             rowKey="id"
-            loading={baixasQuery.isLoading}
+            loading={{
+              spinning: baixasQuery.isLoading,
+              delay: 300,
+            }}
             dataSource={baixasQuery.data?.items ?? []}
             columns={columns}
+            locale={createTableLocale({
+              description: 'Nenhuma baixa patrimonial registrada.',
+            })}
             pagination={{
               current: baixasQuery.data?.page ?? page,
-              pageSize: baixasQuery.data?.limit ?? 10,
+              pageSize,
               total: baixasQuery.data?.total ?? 0,
-              onChange: (nextPage) => {
+              showSizeChanger: true,
+              showTotal: (total) => `${total} itens`,
+              onChange: (nextPage, nextPageSize) => {
+                if (nextPageSize !== pageSize) {
+                  setPageSize(nextPageSize)
+                  setPage(1)
+                  return
+                }
                 setPage(nextPage)
               },
             }}

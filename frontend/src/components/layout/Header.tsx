@@ -52,12 +52,15 @@ export function Header({
           onClick={onNavigateHome}
           onKeyDown={handleBrandKeyDown}
         >
-          <img src={logo} alt="Sistema de Gestao de Patrimonio" />
+          <img
+            src={logo}
+            alt="Sistema de Gestao de Patrimonio da Prefeitura Municipal de Amargosa"
+          />
           <div>
             <Title level={4} style={{ margin: 0 }}>
               Sistema de Gestao de Patrimonio
             </Title>
-            <p>Prefeitura - operacao integrada do projeto</p>
+            <p>Prefeitura Municipal de Amargosa</p>
           </div>
         </div>
       </div>
