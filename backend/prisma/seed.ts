@@ -62,21 +62,39 @@ async function main() {
     process.env.SEED_ADMIN_PASSWORD ?? 'Admin@123',
     12,
   );
-
-  await prisma.usuario.upsert({
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@patrimonio.local';
+  const shouldForceAdminUpdate =
+    process.env.SEED_ADMIN_FORCE_UPDATE === 'true';
+  const existingAdmin = await prisma.usuario.findUnique({
     where: {
-      email: process.env.SEED_ADMIN_EMAIL ?? 'admin@patrimonio.local',
+      email: adminEmail,
     },
-    update: {
-      nome: process.env.SEED_ADMIN_NAME ?? 'Administrador Inicial',
-      perfil: Perfil.ADMINISTRADOR,
-      ativo: true,
-      senhaHash: hashedPassword,
-      secretariaId: null,
+  });
+
+  if (!existingAdmin) {
+    await prisma.usuario.create({
+      data: {
+        nome: process.env.SEED_ADMIN_NAME ?? 'Administrador Inicial',
+        email: adminEmail,
+        perfil: Perfil.ADMINISTRADOR,
+        ativo: true,
+        senhaHash: hashedPassword,
+        secretariaId: null,
+      },
+    });
+    return;
+  }
+
+  if (!shouldForceAdminUpdate) {
+    return;
+  }
+
+  await prisma.usuario.update({
+    where: {
+      email: adminEmail,
     },
-    create: {
+    data: {
       nome: process.env.SEED_ADMIN_NAME ?? 'Administrador Inicial',
-      email: process.env.SEED_ADMIN_EMAIL ?? 'admin@patrimonio.local',
       perfil: Perfil.ADMINISTRADOR,
       ativo: true,
       senhaHash: hashedPassword,

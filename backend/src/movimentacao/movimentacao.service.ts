@@ -826,7 +826,7 @@ export class MovimentacaoService {
 
     if (patrimonio.status !== StatusItem.ATIVO) {
       throw new BadRequestException(
-        'Apenas patrimonios ativos podem iniciar movimentacao nesta fase.',
+        'Apenas patrimonios ativos podem iniciar movimentacao.',
       );
     }
   }

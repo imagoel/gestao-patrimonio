@@ -51,6 +51,39 @@ Se o seu WSL estiver sem `buildx`, rode:
 DOCKER_BUILDKIT=0 COMPOSE_DOCKER_CLI_BUILD=0 docker compose up --build
 ```
 
+## Como subir no Portainer
+
+Para stack no Portainer, use `docker-compose.portainer.yml`.
+
+Esse arquivo foi preparado para nao depender de comandos manuais apos o deploy:
+
+- nao usa bind mount do codigo-fonte;
+- nao depende de `npm run dev`, `start:dev` ou build manual no servidor;
+- reaproveita os `Dockerfile`s ja existentes no `frontend/` e `backend/`;
+- o backend executa `prisma migrate deploy` e `prisma seed` automaticamente;
+- o front sobe ja compilado em imagem de producao;
+- o Nginx sobe como imagem propria do stack, sem bind mount de configuracao;
+- o Nginx expoe a aplicacao em `:8080`.
+
+Variaveis recomendadas no Portainer antes do primeiro deploy:
+
+- `POSTGRES_PASSWORD`
+- `JWT_SECRET`
+- `SEED_ADMIN_PASSWORD`
+- `APP_PORT` se quiser expor em outra porta
+
+Observacao importante:
+
+- o seed continua criando o admin inicial quando ele nao existe;
+- em producao, ele nao sobrescreve a senha do administrador em reinicializacoes, a menos que `SEED_ADMIN_FORCE_UPDATE=true`.
+
+Fluxo esperado no Portainer:
+
+1. criar a stack a partir deste repositorio;
+2. selecionar `docker-compose.portainer.yml`;
+3. subir a stack;
+4. acessar `http://<host>:8080`.
+
 ## Dados iniciais
 
 - Usuario administrador: `admin@patrimonio.local`
